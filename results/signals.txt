@@ -1,0 +1,7 @@
+# Signal Handling Benchmark
+# Timestamp: 2026-03-17T08:16:05+05:30
+# Tool: lat_sig
+
+sig=install lat=0.2382us
+sig=catch lat=1.4404us
+sig=prot lat=64us

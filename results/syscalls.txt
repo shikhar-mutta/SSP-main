@@ -1,0 +1,11 @@
+# System Call Overhead Benchmark
+# Timestamp: 2026-03-17T08:13:28+05:30
+# Tool: lat_syscall
+# Intel Core i5-1035G1 (Ice Lake), Kernel 6.17.0-14-generic, Ubuntu 24.04
+
+syscall=null lat=0.1759us
+syscall=read lat=0.2587us
+syscall=write lat=0.2705us
+syscall=stat lat=1.3820us
+syscall=fstat lat=0.3241us
+syscall=open lat=2.1467us

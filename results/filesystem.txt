@@ -1,0 +1,8 @@
+# Filesystem Create/Delete Benchmark
+# Timestamp: 2026-03-17T08:18:49+05:30
+# Tool: lat_fs
+
+size=0KB create=0us delete=123293us
+size=1KB create=0us delete=130856us
+size=4KB create=0us delete=133082us
+size=10KB create=0us delete=131344us

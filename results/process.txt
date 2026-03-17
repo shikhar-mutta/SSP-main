@@ -1,0 +1,7 @@
+# Process Creation Benchmark
+# Timestamp: 2026-03-17T08:17:10+05:30
+# Tool: lat_proc
+
+proc=fork lat=127.8241us
+proc=exec lat=131.1945us
+proc=shell lat=896.0170us

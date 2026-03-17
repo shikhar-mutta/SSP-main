@@ -1,0 +1,101 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{lmbench}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{2}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{2}{Introduction}{section.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Experimental Setup and Methodology}{2}{section.2}\protected@file@percent }
+\newlabel{sec:setup}{{2}{2}{Experimental Setup and Methodology}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}System Under Test}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces System Under Test — Hardware and Software Configuration}}{3}{table.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:sysinfo}{{1}{3}{System Under Test — Hardware and Software Configuration}{table.caption.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}lmbench Benchmark Tools}{3}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Parameter Space}{4}{subsection.2.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Benchmark Parameter Sweep}}{4}{table.caption.2}\protected@file@percent }
+\newlabel{tab:params}{{2}{4}{Benchmark Parameter Sweep}{table.caption.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Context Switch and Scheduling Analysis}{4}{section.3}\protected@file@percent }
+\newlabel{sec:ctx}{{3}{4}{Context Switch and Scheduling Analysis}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Raw Measurements}{4}{subsection.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Context-Switch Latency ($\mu $s) — \texttt  {lat\_ctx} measurements}}{4}{table.caption.3}\protected@file@percent }
+\newlabel{tab:ctx_raw}{{3}{4}{Context-Switch Latency (\us ) — \texttt {lat\_ctx} measurements}{table.caption.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Context-switch latency scaling. \textbf  {Left:} absolute latency vs.\ process count for three working-set sizes. The dashed yellow line marks the SMT boundary (8 hardware threads); the purple dotted line marks 4 physical cores. \textbf  {Right:} normalised overhead relative to the 2-process baseline, showing that the 64\,KB working-set incurs 2.8$\times $ overhead at 96 processes.}}{5}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:ctx_scaling}{{1}{5}{Context-switch latency scaling. \textbf {Left:} absolute latency vs.\^^Mprocess count for three working-set sizes. The dashed yellow line marks the SMT boundary (8 hardware threads); the purple dotted line marks 4 physical cores. \textbf {Right:} normalised overhead relative to the 2-process baseline, showing that the 64\,KB working-set incurs 2.8$\times $ overhead at 96 processes}{figure.caption.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Context-switch latency heatmap ($\mu $s). Each cell is one measurement. The \textit  {plasma} colour scale highlights how working-set size and process count jointly determine context-switch cost.}}{5}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:ctx_heatmap}{{2}{5}{Context-switch latency heatmap (\us ). Each cell is one measurement. The \textit {plasma} colour scale highlights how working-set size and process count jointly determine context-switch cost}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Scaling Analysis}{5}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 1: 2–8 Processes (Within Physical-Core Capacity)}{5}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 2: 8–32 Processes (Scheduler Run-Queue Pressure)}{6}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 3: 32–96 Processes (Cache Thrashing and Scheduler Overhead)}{6}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Scheduler Tick and CFS Preemption}{6}{Item.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Multicore and SMT Effects}{6}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Memory Hierarchy and Microarchitecture Analysis}{7}{section.4}\protected@file@percent }
+\newlabel{sec:mem}{{4}{7}{Memory Hierarchy and Microarchitecture Analysis}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Memory Latency Profile}{7}{subsection.4.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Memory access latency vs.\ array size as measured by \texttt  {lat\_mem\_rd} with 128-byte stride. Clear latency steps at cache boundaries reveal: L1d (0--48\,KB), L2 (48--512\,KB), L3 (512\,KB--6\,MB), and DRAM (${>}$6\,MB).}}{7}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:mem_hierarchy}{{3}{7}{Memory access latency vs.\ array size as measured by \texttt {lat\_mem\_rd} with 128-byte stride. Clear latency steps at cache boundaries reveal: L1d (0--48\,KB), L2 (48--512\,KB), L3 (512\,KB--6\,MB), and DRAM (${>}$6\,MB)}{figure.caption.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Measured Memory Latency by Hierarchy Level — i5-1035G1 Ice Lake}}{7}{table.caption.7}\protected@file@percent }
+\newlabel{tab:mem_lat}{{4}{7}{Measured Memory Latency by Hierarchy Level — i5-1035G1 Ice Lake}{table.caption.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Relating Memory Latency to Context Switch Cost}{7}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Ice Lake-Specific Microarchitecture Observations}{8}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Enhanced IBRS and IBPB Cost}{8}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Intel HWP (Speed Shift)}{8}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Prefetcher Pollution}{8}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}System Call Overhead}{9}{section.5}\protected@file@percent }
+\newlabel{sec:syscall}{{5}{9}{System Call Overhead}{section.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces System call round-trip latencies -- \texttt  {lat\_syscall}. The \texttt  {null} call (\texttt  {getppid}) represents pure kernel entry/exit. \texttt  {open()+close()} is the most expensive at 2.15\,$\mu $sdue to filesystem namei path resolution.}}{9}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:syscalls}{{4}{9}{System call round-trip latencies -- \texttt {lat\_syscall}. The \texttt {null} call (\texttt {getppid}) represents pure kernel entry/exit. \texttt {open()+close()} is the most expensive at 2.15\,\us due to filesystem namei path resolution}{figure.caption.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces System Call Latency — \texttt  {lat\_syscall} Results}}{9}{table.caption.9}\protected@file@percent }
+\newlabel{tab:syscalls}{{5}{9}{System Call Latency — \texttt {lat\_syscall} Results}{table.caption.9}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Analysis}{9}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Signal Handling}{10}{section.6}\protected@file@percent }
+\newlabel{sec:signals}{{6}{10}{Signal Handling}{section.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Signal handling latency ($\mu $s). Note the logarithmic scale implied by the prot (protection fault) value of 64\,$\mu $s, which is $\sim $270$\times $ higher than signal installation.}}{10}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:signals}{{5}{10}{Signal handling latency (\us ). Note the logarithmic scale implied by the prot (protection fault) value of 64\,\us , which is $\sim $270$\times $ higher than signal installation}{figure.caption.10}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Signal Handling Latency — \texttt  {lat\_sig} Results}}{10}{table.caption.11}\protected@file@percent }
+\newlabel{tab:signals}{{6}{10}{Signal Handling Latency — \texttt {lat\_sig} Results}{table.caption.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Analysis}{10}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Signal Installation (0.2382\,$\mu $s)}{10}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Signal Catch (1.4404\,$\mu $s)}{10}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Protection Fault (64\,$\mu $s)}{11}{Item.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Process Creation}{11}{section.7}\protected@file@percent }
+\newlabel{sec:process}{{7}{11}{Process Creation}{section.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces \textbf  {Left:} Absolute process creation latency for fork, exec, and shell. \textbf  {Right:} Incremental cost decomposition showing the marginal cost of each additional facility.}}{11}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:process}{{6}{11}{\textbf {Left:} Absolute process creation latency for fork, exec, and shell. \textbf {Right:} Incremental cost decomposition showing the marginal cost of each additional facility}{figure.caption.12}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Process Creation Latency — \texttt  {lat\_proc} Results}}{11}{table.caption.13}\protected@file@percent }
+\newlabel{tab:process}{{7}{11}{Process Creation Latency — \texttt {lat\_proc} Results}{table.caption.13}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Analysis}{11}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Fork Cost (127.82\,$\mu $s)}{11}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Exec Overhead (131.19 $-$ 127.82 = 3.37\,$\mu $s)}{12}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Shell Overhead (896.02 $-$ 131.19 = 764.83\,$\mu $s)}{12}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Unified Dashboard and Summary}{12}{section.8}\protected@file@percent }
+\newlabel{sec:dashboard}{{8}{12}{Unified Dashboard and Summary}{section.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Unified performance dashboard showing all five benchmark categories side-by-side on the Intel Core i5-1035G1 (Ice Lake).}}{12}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:dashboard}{{7}{12}{Unified performance dashboard showing all five benchmark categories side-by-side on the Intel Core i5-1035G1 (Ice Lake)}{figure.caption.14}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Complete Benchmark Summary — All Measurements}}{13}{table.caption.15}\protected@file@percent }
+\newlabel{tab:summary}{{8}{13}{Complete Benchmark Summary — All Measurements}{table.caption.15}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {9}Discussion}{13}{section.9}\protected@file@percent }
+\newlabel{sec:discuss}{{9}{13}{Discussion}{section.9}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1}Context Switch Cost vs.\ Scheduling Period}{13}{subsection.9.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2}Impact of Security Mitigations}{14}{subsection.9.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3}Recommendations}{14}{subsection.9.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}Conclusion}{14}{section.10}\protected@file@percent }
+\newlabel{sec:conclusion}{{10}{14}{Conclusion}{section.10}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Raw Context Switch Data}{15}{appendix.A}\protected@file@percent }
+\newlabel{app:rawctx}{{A}{15}{Raw Context Switch Data}{appendix.A}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {B}Memory Latency Profile Data}{15}{appendix.B}\protected@file@percent }
+\newlabel{app:mem}{{B}{15}{Memory Latency Profile Data}{appendix.B}{}}
+\bibcite{lmbench}{1}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Benchmark Scripts}{16}{appendix.C}\protected@file@percent }
+\newlabel{app:scripts}{{C}{16}{Benchmark Scripts}{appendix.C}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {1}{\ignorespaces bench\_context\_switch.sh (excerpt)}}{16}{lstlisting.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {D}System Information}{16}{appendix.D}\protected@file@percent }
+\newlabel{app:sysinfo}{{D}{16}{System Information}{appendix.D}{}}
+\bibcite{cfs}{2}
+\bibcite{icl}{3}
+\bibcite{spectre}{4}
+\bibcite{meltdown}{5}
+\bibcite{ibrs}{6}
+\bibcite{lat}{7}
+\gdef \@abspage@last{18}
