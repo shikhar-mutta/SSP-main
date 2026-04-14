@@ -56,7 +56,7 @@ desktop.ini
 
 # ── VS Code ───────────────────────────────────────────────────────────────────
 # Keep workspace settings (recipes, etc.) but ignore user-specific state
-.vscode/launch.json
+.vscode
 .vscode/*.code-workspace
 
 # ── Benchmark results (raw CSVs) ──────────────────────────────────────────────
