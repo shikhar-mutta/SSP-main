@@ -1,0 +1,68 @@
+# ── LaTeX build artifacts ─────────────────────────────────────────────────────
+report/*.aux
+report/*.bbl
+report/*.blg
+report/*.fdb_latexmk
+report/*.fls
+report/*.log
+report/*.out
+report/*.synctex.gz
+report/*.toc
+report/*.lof
+report/*.lot
+report/*.nav
+report/*.snm
+report/*.vrb
+report/*.bcf
+report/*.run.xml
+
+# Keep the compiled PDF and source
+!report/*.pdf
+!report/*.tex
+
+# IEEEtran.cls was downloaded locally — don't commit it (it's a third-party file)
+report/IEEEtran.cls
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+*.ipynb
+
+# ── OS files ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+*.swo
+
+# ── VS Code ───────────────────────────────────────────────────────────────────
+# Keep workspace settings (recipes, etc.) but ignore user-specific state
+.vscode/launch.json
+.vscode/*.code-workspace
+
+# ── Benchmark results (raw CSVs) ──────────────────────────────────────────────
+# Uncomment the line below if you do NOT want to commit raw results
+# results/*.csv
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.tmp
+*.bak
