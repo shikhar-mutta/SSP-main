@@ -1,3 +1,30 @@
+# ============================================================================
+# SSP (System Scaling Performance) Project - Git Ignore Rules
+# ============================================================================
+
+# ── C/C++ Build Artifacts ─────────────────────────────────────────────────────
+# Object files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+
+# Build directory (from Makefile)
+obj/
+build/
+dist/
+
+# Compiled executables (project-specific)
+load_generator
+benchmark
+analysis
+microarch
+*.out
+*.exe
+
 # ── LaTeX build artifacts ─────────────────────────────────────────────────────
 report/*.aux
 report/*.bbl
@@ -66,3 +93,58 @@ desktop.ini
 # ── Misc ──────────────────────────────────────────────────────────────────────
 *.tmp
 *.bak
+core
+core.*
+*.stackdump
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# ── Profiling and Performance Analysis ────────────────────────────────────────
+*.prof
+*.perf
+gprof.out
+callgrind.out.*
+cachegrind.out.*
+perf.data
+perf.data.old
+
+# ── IDE and Editor Files ──────────────────────────────────────────────────────
+# VS Code
+.vscode/
+.vscode/*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Other editors
+*.sublime-project
+*.sublime-workspace
+.vim
+.emacs*
+*~
+.classpath
+.project
+.c9/
+
+# ── Debugger and Analysis Tools ───────────────────────────────────────────────
+.ccls-cache/
+.clangd/
+compile_commands.json
+
+# ── System and OS Files ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
