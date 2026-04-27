@@ -92,6 +92,7 @@ lmbench/src/git.ver
 results/*.csv
 results/*.txt
 results/*.log
+.codex
 
 # Generated figures from analysis scripts
 report/figures/*.pdfShort answer: Partially done.
