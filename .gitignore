@@ -66,3 +66,39 @@ desktop.ini
 # ── Misc ──────────────────────────────────────────────────────────────────────
 *.tmp
 *.bak
+
+# ── Native build artifacts ────────────────────────────────────────────────────
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Local benchmark binaries
+bin/*
+!bin/.gitkeep
+
+# ── lmbench generated files ───────────────────────────────────────────────────
+lmbench/bin/
+lmbench/Results/
+lmbench/results/
+lmbench/src/*.o
+lmbench/src/*.a
+lmbench/src/*.s
+lmbench/src/git.ver
+
+# ── Generated experiment outputs ──────────────────────────────────────────────
+results/*.csv
+results/*.txt
+results/*.log
+
+# Generated figures from analysis scripts
+report/figures/*.pdfShort answer: Partially done.
+
+✅ Main pipeline (custom C benchmarks + plots + report PDF) is done.
+❌ Full “real” pipeline is not fully done because lmbench Phase-1 build/run failed in logs.
+⚠️ Current lmbench/NUMA/eBPF files exist, but at least some are fallback/projected data (not fully fresh real measurements).
+
+# Legacy generated report file at repo root
+SSP_Paper.pdf
