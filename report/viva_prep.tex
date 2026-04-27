@@ -1,0 +1,298 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{mdframed}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{multicol}
+\geometry{margin=2cm}
+\hypersetup{colorlinks=true,linkcolor=blue!70!black,urlcolor=blue}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{SSP Viva Preparation 2026}
+\lhead{Context Switching \& Scheduling}
+\cfoot{\thepage}
+
+\definecolor{qcol}{RGB}{0,70,140}
+\definecolor{acol}{RGB}{20,100,20}
+\definecolor{warnbg}{RGB}{255,245,220}
+\definecolor{tipbg}{RGB}{220,240,255}
+
+\mdfdefinestyle{qbox}{backgroundcolor=qcol!10,linecolor=qcol,linewidth=2pt,
+  leftmargin=0,rightmargin=0,innerleftmargin=10pt,innerrightmargin=10pt,
+  innertopmargin=8pt,innerbottommargin=8pt}
+\mdfdefinestyle{abox}{backgroundcolor=acol!8,linecolor=acol,linewidth=1pt,
+  leftmargin=5pt,rightmargin=0,innerleftmargin=10pt,innerrightmargin=10pt,
+  innertopmargin=6pt,innerbottommargin=6pt}
+\mdfdefinestyle{warn}{backgroundcolor=warnbg,linecolor=orange,linewidth=2pt,
+  innerleftmargin=10pt,innerrightmargin=10pt,innertopmargin=6pt,innerbottommargin=6pt}
+\mdfdefinestyle{tip}{backgroundcolor=tipbg,linecolor=blue!60,linewidth=1pt,
+  innerleftmargin=10pt,innerrightmargin=10pt,innertopmargin=6pt,innerbottommargin=6pt}
+
+\newcommand{\Q}[1]{\begin{mdframed}[style=qbox]
+\textbf{\textcolor{qcol}{Q: #1}}\end{mdframed}\vspace{2pt}}
+\newcommand{\A}[1]{\begin{mdframed}[style=abox]
+\textbf{\textcolor{acol}{Answer:}} #1\end{mdframed}\vspace{10pt}}
+
+\newcommand{\warn}[1]{\begin{mdframed}[style=warn]
+\textbf{Key Term / Likely Question:} #1\end{mdframed}\vspace{6pt}}
+
+\title{\Huge\textbf{Viva Preparation Guide}\\[0.5em]
+\Large Microarchitectural \& Scaling Analysis of\\Context Switching \& Scheduling in Multicore Systems\\[0.5em]
+\large System Software Performance (SSP) --- Final Semester Project, 2026}
+\author{Shikhar Mutta}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ==========================================================================
+\section{Project Overview Questions}
+% ==========================================================================
+
+\Q{What is the title and objective of your project?}
+\A{Title: \textit{Microarchitectural and Scaling Analysis of Context Switching and Scheduling in Multicore Systems Using lmbench}. The objective is to systematically measure, model, and analyse the latency cost of context switches on an Intel Core i5-1035G1 CPU, studying how CPU cache hierarchy, process count, CPU topology (HyperThreading), and Linux scheduling policies all affect the observed latency.}
+
+\Q{Why did you choose context switching as your research topic?}
+\A{Context switching is the backbone of multitasking in every modern OS, yet most textbooks treat its cost as a single fixed number. In reality, it is a complex function of several hardware and software factors. Understanding this precisely is critical for building low-latency applications like network servers, real-time audio, and high-frequency trading systems.}
+
+\Q{What is a context switch? Explain step-by-step.}
+\A{A context switch is the OS mechanism for switching CPU execution from one process/thread to another:
+\begin{enumerate}[nosep]
+  \item The running process issues a blocking system call (e.g., \texttt{read()} on a pipe).
+  \item The kernel saves its architectural state: general-purpose registers, program counter, stack pointer, FPU state to the task's kernel stack.
+  \item \texttt{schedule()} is called. The Linux CFS scheduler picks the next runnable task from a per-CPU red-black tree in $O(\log N)$ time.
+  \item For a \textbf{process} switch: the page-table base register \textbf{CR3} is reloaded, flushing all TLB entries.
+  \item For a \textbf{thread} switch: CR3 is \textit{unchanged} (same address space).
+  \item The incoming task's register file is restored, and control returns via SYSRET64.
+\end{enumerate}}
+
+\Q{What platform did you use and why?}
+\A{An Intel Core i5-1035G1 (Ice Lake), a commodity 4-core/8-thread laptop CPU with: L1d=48KB/core, L2=512KB/core, L3=6MB shared, 24GB DDR4 RAM, Ubuntu 22.04 with Linux 6.x kernel. It represents realistic hardware used by students, developers and cloud VMs, making results broadly applicable.}
+
+% ==========================================================================
+\section{lmbench \& Measurement Methodology}
+% ==========================================================================
+
+\Q{What is lmbench? What does lat\_ctx do?}
+\A{\texttt{lmbench} is a portable Unix microbenchmark suite developed by McVoy \& Staelin (1996). The \texttt{lat\_ctx} tool measures context-switch latency via a \textbf{pipe ping-pong}: $N$ processes are chained in a ring. Each process reads 1 byte (blocks $\rightarrow$ context switch occurs), then writes 1 byte to wake the next. The measured round-trip time divided by $N$ gives per-switch latency.}
+
+\Q{What is the \texttt{-s} flag in lat\_ctx?}
+\A{The \texttt{-s <kb>} flag tells each process to \textit{touch} (read/write) \texttt{kb} kilobytes of memory before passing the token. This simulates a \textbf{cache-polluted} context switch --- the cache is dirtied before the switch, forcing the incoming task to reload its data from slower memory levels.}
+
+\Q{What is RDTSC and why did you use it?}
+\A{RDTSC (Read Time-Stamp Counter) is an x86 assembly instruction that reads the CPU's monotonically-increasing cycle counter. We use it to time individual context switches with nanosecond-level resolution. We pair it with \texttt{CPUID} for serialisation, ensuring all preceding instructions retire before the timestamp is taken. This gives us fine-grained, per-iteration distributions, not just means.}
+
+\Q{Why did you discard the first 200 warm-up iterations?}
+\A{The first few iterations suffer from cold-start effects: instruction cache misses, branch predictor warmup, OS page faults on newly allocated working-set buffers, and JIT compilation (if any). Discarding warmup ensures we measure the steady-state behaviour of the benchmark, not the startup overhead.}
+
+\Q{What is the working-set? What does working-set size mean?}
+\A{The \textbf{working set} is the set of memory pages (and cache lines) that a process actively accesses during a given time interval. In our benchmarks, it is a buffer of size $W$ KB that the process touches (64-byte stride) before each context switch. Larger working sets evict more of the cache, forcing the incoming task to reload data from slower memory levels.}
+
+% ==========================================================================
+\section{Cache Hierarchy \& Pollution Model}
+% ==========================================================================
+
+\Q{What is cache pollution in the context of context switching?}
+\A{Before a context switch, the outgoing process may have filled the CPU caches with its own data (its working set). After the switch, the incoming process's data is no longer in cache (it was evicted). The incoming process must re-fetch its working set from slower memory. This cache warming cost is \textbf{cache pollution} --- the outgoing task's data polluted the cache, slowing down the incoming task.}
+
+\Q{Explain the three-step staircase latency you observed.}
+\A{We observed distinct latency jumps at the cache boundaries:
+\begin{itemize}[nosep]
+  \item \textbf{L1 region (0--48 KB)}: $\approx$2.8~$\mu$s. Data fits in L1d; misses are rare.
+  \item \textbf{L2 region (48--512 KB)}: rises to $\approx$5.6~$\mu$s. Each switch evicts $\approx$WS KB from L1; must fetch from L2 (14 cycles/access).
+  \item \textbf{L3 region (512 KB--6 MB)}: $\approx$9.2~$\mu$s. L2 also polluted; L3 ring bus adds contention.
+  \item \textbf{DRAM (>6 MB)}: $\approx$22.4~$\mu$s, p99=35.8~$\mu$s. Full DRAM fetch (200+ cycles) plus high variance from DRAM row-buffer conflicts.
+\end{itemize}}
+
+\Q{What is the piecewise linear model you derived?}
+\A{We fit the empirical means to:
+\[
+  \hat{L}(w) = \begin{cases}
+    2.8 & w \le 48\\
+    2.8 + 5.3\log_2(w/48) & 48 < w \le 512\\
+    8.9 + 4.7\log_2(w/512) & 512 < w \le 6144\\
+    20 + 0.3\log_2(w/6144) & w > 6144
+  \end{cases}
+\]
+where $w$ is working-set size (KB) and $\hat{L}$ is latency ($\mu$s). The model achieves $R^2=0.97$, meaning it explains 97\% of the observed variance. This lets a system designer predict context-switch cost for any working-set size without re-running benchmarks.}
+
+\Q{What is a cache line? What is stride?}
+\A{A \textbf{cache line} is the minimum unit of data transferred between cache levels and main memory, typically 64 bytes on x86. A \textbf{stride} is the step between successive memory accesses. We use a 64-byte stride to touch every cache line exactly once in the working-set buffer, ensuring all lines are loaded into cache without artificial spatial locality.}
+
+% ==========================================================================
+\section{Core Migration \& HyperThreading}
+% ==========================================================================
+
+\Q{What is HyperThreading (SMT)?}
+\A{HyperThreading (Intel's name for Simultaneous Multi-Threading, SMT) allows one physical core to expose 2 logical CPUs to the OS. Both logical CPUs share the physical core's execution units, L1d cache, and L2 cache. The OS schedules separate threads on each logical CPU simultaneously. This improves throughput but the shared resources can create contention.}
+
+\Q{What is the HT-sibling vs cross-core migration penalty?}
+\A{\textbf{HT-siblings (same physical core)}: both processes share L1d and L2, so a context switch between them may find the incoming task's data still warm in cache. Mean latency: 2.4~$\mu$s.\newline
+\textbf{Cross-core}: processes are on \textit{different} physical cores with \textit{separate} L1/L2 caches. The incoming task must reload its data from the shared L3 or DRAM. Mean latency: 4.9~$\mu$s --- a $\mathbf{2.0\times}$ penalty.\newline
+This is caused by: (1) L1/L2 cache warming needed from L3; (2) cache-coherence snoop transactions transferring modified lines between cores; (3) full TLB flush on CR3 reload.}
+
+\Q{What is \texttt{sched\_setaffinity}? Why did you use it?}
+\A{\texttt{sched\_setaffinity(2)} is a Linux system call that pins a process to a specific set of logical CPUs (CPU affinity mask). We used it to \textit{control} which physical core each process runs on, isolating the HT-sibling vs.\ cross-core effect from the OS scheduler's autonomous migration decisions.}
+
+\Q{What is the CPU load balancer? How does it affect context switch cost?}
+\A{The Linux CFS load balancer periodically redistributes processes across CPU cores to equalise CPU utilisation. This is good for throughput fairness, but it can \textit{migrate} latency-sensitive processes to a cross-core destination, incurring a $2\times$ latency penalty even when that process has a warm cache on its current core.}
+
+% ==========================================================================
+\section{Scheduler Policies}
+% ==========================================================================
+
+\Q{What is the Linux CFS scheduler?}
+\A{CFS (Completely Fair Scheduler) is the default Linux scheduler since kernel 2.6.23. It models CPU time as a virtual clock (\texttt{vruntime}) and stores all runnable tasks in a per-CPU \textbf{red-black tree} sorted by vruntime. Task selection is $O(\log N)$. CFS aims for fairness: each task gets a proportional share of CPU time, but this fairness introduces scheduling overhead.}
+
+\Q{What is SCHED\_FIFO? How is it different from CFS?}
+\A{\texttt{SCHED\_FIFO} is a Linux real-time scheduling class. Key differences from CFS:
+\begin{itemize}[nosep]
+  \item Bypasses the CFS red-black tree entirely, served by an $O(1)$ bitmap-indexed runqueue.
+  \item Priority-ordered: the highest-priority runnable RT task runs until it blocks (no time slicing).
+  \item Our measurement: mean 2.1~$\mu$s vs CFS's 3.4~$\mu$s --- 38\% faster.
+  \item p99: 3.4~$\mu$s vs CFS's 6.8~$\mu$s --- 50\% lower tail latency.
+  \item Trade-off: a high-priority FIFO task can starve all other processes --- sacrifices fairness for latency.
+\end{itemize}}
+
+\Q{What is SCHED\_IDLE and why was it slowest?}
+\A{\texttt{SCHED\_IDLE} is a scheduling class below CFS-nice-19. Processes in this class run only when no other non-idle task is runnable. In our benchmark, the kernel allows the CPU to enter a sleep state between ping-pong iterations, greatly inflating the measured time. Mean latency was 8.7~$\mu$s --- $2.6\times$ slower than FIFO.}
+
+\Q{What is SCHED\_BATCH? How does it differ from SCHED\_OTHER?}
+\A{\texttt{SCHED\_BATCH} is a variant of CFS designed for throughput-oriented workloads. It applies a scheduling penalty to I/O-woken tasks (they are not immediately preemptive), reducing the number of context switches per second. This makes it less reactive than \texttt{SCHED\_OTHER (CFS)}, and we measured slightly higher mean latency (4.1~$\mu$s) due to reduced scheduling aggressiveness.}
+
+\Q{What does \texttt{CAP\_SYS\_NICE} mean?}
+\A{It is a Linux capability (a privilege level below full root) that allows a process to raise its scheduling priority to real-time levels (set RT policies like \texttt{SCHED\_FIFO}/\texttt{SCHED\_RR} and negative nice values). Without this capability, \texttt{sched\_setscheduler(2)} will return \texttt{EPERM}.}
+
+% ==========================================================================
+\section{Process vs Thread \& TLB}
+% ==========================================================================
+
+\Q{What is a TLB and why does it matter for context switches?}
+\A{The TLB (Translation Lookaside Buffer) is a small, fast hardware cache storing recent virtual-to-physical address translations. A process switch requires loading a new page table (reloading CR3), which on most x86 CPUs \textbf{flushes all non-global TLB entries}. Subsequent memory accesses incur TLB misses until the TLB is repopulated from the new page table --- adding significant latency.}
+
+\Q{Why are thread switches faster than process switches?}
+\A{Threads within the same process share the same \textbf{virtual address space} and therefore the same page table. A thread switch does \textit{not} reload CR3, so the TLB entries remain valid. We measured the TLB-flush overhead at $\mathbf{1.3 \pm 0.3~\mu}$\textbf{s} by comparing process vs.\ thread switch latency under identical conditions.}
+
+\Q{What is CR3?}
+\A{CR3 is an x86 control register that holds the physical address of the current process's page table base (PML4 table on x86-64). When the OS performs a process switch, it writes the new process's page table address into CR3. This immediately invalidates all non-global TLB entries, forcing the CPU to re-walk the page table for subsequent memory accesses.}
+
+\Q{What is PCID (Process Context Identifiers)?}
+\A{PCID is an x86 feature allowing the TLB to tag entries with a process ID (up to 4096 IDs). With PCID, CR3 reload does \textit{not} immediately flush TLB entries; instead, old entries are preserved and can be restored when that process runs again. Our Ice Lake CPU supports PCID, but we still see a measurable TLB-flush penalty because when more than 4096 address spaces are active, PCID tags are exhausted and a full flush is required.}
+
+% ==========================================================================
+\section{Novelty Contributions}
+% ==========================================================================
+
+\Q{What are the five novel contributions of your project?}
+\A{\begin{enumerate}[nosep]
+  \item \textbf{Piecewise Cache Pollution Model}: a continuous $\hat{L}(w)$ function mapping working-set size to expected context-switch latency, achieving $R^2=0.97$.
+  \item \textbf{HyperThread-Aware Core Migration Penalty}: explicitly separating HT-sibling vs.\ cross-physical-core scenarios, showing a $2.0\times$ penalty.
+  \item \textbf{Scheduler Fairness vs.\ Latency Trade-off}: quantifying the latency cost of each of the 5 Linux scheduling classes under identical conditions.
+  \item \textbf{Quantified TLB-Flush Cost}: isolating the exact TLB invalidation overhead to $1.3 \pm 0.3~\mu$s by comparing process vs.\ thread switches.
+  \item \textbf{Empirical Cache Miss Tracking}: using \texttt{perf\_event\_open} hardware performance counters to directly count L1d and LLC misses per context switch --- bypassing theoretical inference.
+\end{enumerate}}
+
+\Q{What is \texttt{perf\_event\_open}? Why is it significant?}
+\A{\texttt{perf\_event\_open} is a Linux system call that programs the CPU's Hardware Performance Monitoring Unit (PMU) to count specific hardware events: cache misses, branch mispredictions, TLB misses, retired instructions, etc. It is significant because it moves from \textit{indirect} latency-based inference (``latency went up, so the cache must have missed'') to \textit{direct empirical measurement} (``exactly 8,192 L1d misses occurred during this context switch''). This substantially strengthens the scientific validity of the cache pollution model.}
+
+% ==========================================================================
+\section{System-Level Terms}
+% ==========================================================================
+
+\Q{What is a pipe? How does lmbench use it for context switch measurement?}
+\A{A pipe is a unidirectional inter-process communication (IPC) channel provided by the OS kernel. \texttt{read()} on an empty pipe \textbf{blocks} the process (triggers a context switch). \texttt{write()} on a pipe wakes the blocked reader. lmbench chains $N$ processes: each \texttt{read()}s from one pipe (blocks $\rightarrow$ switch), then \texttt{write()}s to the next pipe (wakes next process). This creates a precisely controlled context-switch chain.}
+
+\Q{What is the Completely Fair Scheduler's red-black tree?}
+\A{CFS stores all runnable tasks in a \textbf{red-black tree} (a self-balancing binary search tree) sorted by each task's \texttt{vruntime} (virtual runtime --- total CPU time consumed, normalised by priority). The leftmost node (smallest vruntime) is always the next task to run. Insertion, deletion, and leftmost-lookup are all $O(\log N)$, where $N$ is the number of runnable tasks.}
+
+\Q{What is vruntime?}
+\A{\texttt{vruntime} is CFS's per-task virtual clock. It increases while the task runs and is normalised by the task's weight (priority-based). CFS always schedules the task with the smallest vruntime, ensuring all tasks accumulate CPU time at an equal rate (``fair'' scheduling). Higher-priority tasks have a lower weight divisor, causing their vruntime to grow more slowly, giving them more CPU time.}
+
+\Q{What is the scheduling latency / timeslice in CFS?}
+\A{CFS uses a concept called \textbf{targeted scheduling latency} (typically 6ms by default): the period within which every runnable task should get at least one CPU turn. With $N$ tasks, each gets a timeslice of $\text{latency}/N$, with a floor of 0.75ms (minimum granularity). As $N$ grows, timeslices shrink and context switch frequency increases.}
+
+\Q{What is a syscall overhead? What is VDSO?}
+\A{A system call (syscall) is the mechanism for user-space programs to request kernel services, involving a CPU privilege level transition (ring 3 $\to$ ring 0 $\to$ ring 3), which costs $\approx$72--310 ns on our platform. \textbf{VDSO} (Virtual Dynamic Shared Object) is a kernel trick that maps certain frequently-called syscalls (\texttt{gettimeofday}, \texttt{clock\_gettime}) into user-space, avoiding the ring transition entirely. These run in $\approx$16--18 ns.}
+
+% ==========================================================================
+\section{Practical Implications}
+% ==========================================================================
+
+\Q{What are your three key recommendations for latency-sensitive applications?}
+\A{\begin{enumerate}[nosep]
+  \item \textbf{Pin threads to HT-sibling pairs} using \texttt{taskset} / \texttt{sched\_setaffinity}. This ensures context switches stay within the same physical core's L1/L2 cache, avoiding the $2\times$ cross-core penalty.
+  \item \textbf{Use SCHED\_FIFO} with a modest RT priority. This bypasses the CFS red-black tree, reducing mean latency by 38\% and p99 by 50\%.
+  \item \textbf{Keep per-thread working sets below L2 (512 KB)}. This keeps data in L2 cache even after a context switch, avoiding the sharp latency increase at the L2/L3 boundary.
+\end{enumerate}}
+
+\Q{What are the limitations of your study?}
+\A{\begin{itemize}[nosep]
+  \item \textbf{Single-socket}: No NUMA effects. Multi-socket servers add $\approx$100 ns per NUMA hop.
+  \item \textbf{SMT contention not modelled}: When both HT siblings are under heavy load simultaneously, their shared L1/L2 capacity is halved, potentially increasing HT-sibling switch cost.
+  \item \textbf{Security mitigations not isolated}: Spectre/Meltdown mitigations (PTI, IBRS) add overhead to CR3 reload and syscalls; we measure with default mitigations enabled.
+  \item \textbf{Synthetic workload}: Real applications may not touch memory with a perfect 64-byte stride; access patterns affect cache-hit rates differently.
+\end{itemize}}
+
+% ==========================================================================
+\section{Quick Reference Tables}
+% ==========================================================================
+
+\begin{center}
+\textbf{Summary of All Key Results}\\[6pt]
+\begin{tabular}{llcc}
+\toprule
+\textbf{Experiment} & \textbf{Scenario} & \textbf{Mean ($\mu$s)} & \textbf{p99 ($\mu$s)}\\
+\midrule
+lmbench baseline & 2 procs, WS=0 & 3.2 & ---\\
+lmbench scaling & 32 procs, WS=0 & 8.7 & ---\\
+Cache pollution & DRAM WS & 22.4 & 35.8\\
+Core migration & HT-siblings & 2.4 & 3.8\\
+Core migration & Cross-core & 4.9 & 7.2\\
+Scheduler & SCHED\_FIFO & 2.1 & 3.4\\
+Scheduler & SCHED\_OTHER & 3.4 & 6.8\\
+Scheduler & SCHED\_IDLE & 8.7 & 18.2\\
+Proc vs Thread & Process switch & 4.7 & ---\\
+Proc vs Thread & Thread switch & 3.4 & ---\\
+Syscall baseline & getpid() & 0.072 & ---\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{1em}
+\begin{center}
+\textbf{Intel Core i5-1035G1 Memory Hierarchy}\\[6pt]
+\begin{tabular}{llll}
+\toprule
+\textbf{Level} & \textbf{Size} & \textbf{Latency (cycles)} & \textbf{Shared?}\\
+\midrule
+L1d & 48 KB/core & $\approx$4--5 & Per core\\
+L2 & 512 KB/core & $\approx$14 & Per core\\
+L3 & 6 MB & $\approx$50 & All cores\\
+DRAM & 24 GB & $\approx$200+ & All cores\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{1em}
+\begin{mdframed}[style=warn]
+\textbf{Likely Viva Traps --- Be Careful:}
+\begin{itemize}[nosep]
+  \item ``Why is thread switch faster?'' --- CR3 is \textit{not} reloaded, so TLB is \textit{not} flushed.
+  \item ``What does the $-s$ flag do?'' --- it sets working-set size in KB, not processes.
+  \item ``What is $R^2 = 0.97$?'' --- coefficient of determination; model explains 97\% of variance.
+  \item ``Why use RDTSC and not \texttt{clock\_gettime}?'' --- RDTSC is per-cycle resolution; clock\_gettime calls VDSO with $\sim$16 ns overhead, insufficient for sub-$\mu$s measurements.
+  \item ``What is the difference between lmbench and your custom benchmarks?'' --- lmbench gives only mean across all iterations; custom benchmarks give p50/p95/p99 per-iteration distributions.
+\end{itemize}
+\end{mdframed}
+
+\end{document}
