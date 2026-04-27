@@ -194,31 +194,27 @@ SSP-main/
 - Automatic metric aggregation and correlation
 - Multi-layer analysis (raw → derived → composite → classification)
 
-### 2. Adaptive Bottleneck Classification
-- Automated detection of performance-limiting factors
-- Weighted efficiency scoring (Cache 50%, Branch 30%, Scheduling 20%)
-- Contextual optimization recommendations
-- Severity ranking of multiple bottlenecks
-
-### 3. Context-Switch & Scheduling Analysis (NOVEL)
+### 2. Context-Switch & Scheduling Analysis (NOVEL)
 - Direct measurement of scheduling overhead
 - CPU migration tracking across NUMA systems
 - Per-core vs system-wide monitoring
 - Scheduling efficiency scoring (0.0-1.0 scale)
+- **Tail Latency Analysis**: P50, P95, P99 latency percentile computation
+- Wakeup latency distribution tracking under various load conditions
 
-### 4. Scaling Efficiency Metrics (NOVEL)
+### 3. Scaling Efficiency Metrics (NOVEL)
 - Speedup-based efficiency computation
 - Amdahl's law comparison
 - Serialization bottleneck identification
 - Single-core vs multicore overhead analysis
 
-### 5. Comprehensive Perf Integration
+### 4. Comprehensive Perf Integration
 - Direct syscall interface (no external tools)
 - Session-based event management
 - Per-CPU and system-wide monitoring
 - Efficient multiplexing support
 
-### 6. Modular Workload Architecture
+### 5. Modular Workload Architecture
 - Independent modules as library functions
 - Composable workload generation
 - Precise CPU affinity control

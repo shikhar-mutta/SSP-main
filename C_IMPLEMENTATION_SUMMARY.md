@@ -254,31 +254,27 @@ benchmark --workload cpu,io,memory --intensity 50,75,100 \
   - Multicore scalability
 - Single framework for comprehensive system analysis
 
-### 2. **Adaptive Bottleneck Classification**
-- Automated identification of performance-limiting factors
-- Weighted efficiency scoring accounting for multiple constraints
-- Contextual recommendations for optimization
-- Severity ranking of multiple bottlenecks
-
-### 3. **Modular Workload Architecture**
+### 2. **Modular Workload Architecture**
 - Independent workload modules callable as library functions
 - Support for composition (mixed workloads)
 - CPU affinity control for precise placement
 - Configurable intensity with duty-cycle granularity
 
-### 4. **Context-Switch & Scheduling Analysis**
+### 3. **Context-Switch & Scheduling Analysis**
 - Direct measurement of context switching overhead
 - CPU migration tracking across NUMA/multicore systems
 - Scheduling efficiency scoring (0.0-1.0)
 - Comparison of single-core vs multicore scheduling costs
+- **Tail Latency Analysis**: P50, P95, P99 latency percentile computation
+- Wakeup latency distribution tracking under various load conditions
 
-### 5. **Scaling Efficiency Computation**
+### 4. **Scaling Efficiency Computation**
 - Speedup-based efficiency metric
 - Accounts for context-switch overhead in multicore scenarios
 - Comparison against Amdahl's law predictions
 - Identification of serialization bottlenecks
 
-### 6. **Comprehensive Perf Integration**
+### 5. **Comprehensive Perf Integration**
 - Direct syscall interface (no external tools required)
 - Session-based event management
 - Per-CPU and system-wide monitoring
