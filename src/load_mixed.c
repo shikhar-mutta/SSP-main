@@ -12,8 +12,8 @@
 #include <string.h>
 
 /* Forward declarations */
-void cpu_load_worker(int intensity, int duration, int cpu_id);
-void memory_load_worker(int intensity, int duration, int cache_level);
+void cpu_load_worker(int intensity, int duration, int cpu_id, ssp_metrics_t *metrics);
+void memory_load_worker(int intensity, int duration, int cache_level, ssp_metrics_t *metrics);
 
 /**
  * Thread context for mixed load
@@ -24,6 +24,7 @@ typedef struct {
     int cpu_id;
     int thread_type;  /* 0=CPU, 1=Memory */
     int cache_level;
+    ssp_metrics_t metrics;
 } mixed_thread_context_t;
 
 /**
@@ -34,13 +35,12 @@ static void *mixed_thread_worker(void *arg) {
     
     if (ctx->thread_type == 0) {
         /* CPU load thread */
-        cpu_load_worker(ctx->intensity, ctx->duration, ctx->cpu_id);
+        cpu_load_worker(ctx->intensity, ctx->duration, ctx->cpu_id, &ctx->metrics);
     } else {
         /* Memory load thread */
-        memory_load_worker(ctx->intensity, ctx->duration, ctx->cache_level);
+        memory_load_worker(ctx->intensity, ctx->duration, ctx->cache_level, &ctx->metrics);
     }
-    
-    free(ctx);
+
     return NULL;
 }
 
@@ -51,7 +51,7 @@ static void *mixed_thread_worker(void *arg) {
  * duration: seconds to run
  * num_cpus: number of CPUs (CPU thread pins to first CPU)
  */
-void mixed_load_worker(int intensity, int duration, int num_cpus) {
+void mixed_load_worker(int intensity, int duration, int num_cpus, ssp_metrics_t *metrics) {
     /* Clamp intensity */
     if (intensity < 0) intensity = 0;
     if (intensity > 100) intensity = 100;
@@ -77,6 +77,7 @@ void mixed_load_worker(int intensity, int duration, int num_cpus) {
     cpu_ctx->cpu_id = 0;
     cpu_ctx->thread_type = 0;
     cpu_ctx->cache_level = 0;
+    ssp_metrics_init(&cpu_ctx->metrics);
     
     if (pthread_create(&cpu_thread, NULL, mixed_thread_worker, cpu_ctx) != 0) {
         ssp_log(SSP_LOG_ERROR, "Failed to create CPU load thread");
@@ -97,6 +98,7 @@ void mixed_load_worker(int intensity, int duration, int num_cpus) {
     mem_ctx->cpu_id = (num_cpus > 1) ? 1 : 0;
     mem_ctx->thread_type = 1;
     mem_ctx->cache_level = 0;
+    ssp_metrics_init(&mem_ctx->metrics);
     
     if (pthread_create(&mem_thread, NULL, mixed_thread_worker, mem_ctx) != 0) {
         ssp_log(SSP_LOG_ERROR, "Failed to create memory load thread");
@@ -111,6 +113,14 @@ void mixed_load_worker(int intensity, int duration, int num_cpus) {
     /* Wait for both threads to complete */
     pthread_join(cpu_thread, NULL);
     pthread_join(mem_thread, NULL);
+
+    if (metrics) {
+        ssp_metrics_merge(metrics, &cpu_ctx->metrics);
+        ssp_metrics_merge(metrics, &mem_ctx->metrics);
+    }
+
+    free(cpu_ctx);
+    free(mem_ctx);
     
     ssp_log(SSP_LOG_INFO, "Mixed load generation complete");
 }

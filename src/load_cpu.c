@@ -1,8 +1,12 @@
 /**
- * CPU Load Generator
+ * CPU Load Generator (NORMALIZED: Latency per Fixed Operation Count)
  * 
- * Generates configurable CPU load via busy-loop with duty-cycle control.
+ * Measures latency per 1M fixed sin/cos operations (normalized unit).
+ * Intensity controls duty cycle (% of time generating load vs idle).
  * Uses floating-point arithmetic to defeat compiler optimization.
+ * 
+ * FIX for Issue 2: Instead of measuring chunk_duration (which scales by construction),
+ * we now measure latency per N fixed operations, making it comparable to other workloads.
  */
 
 #include "ssp_lib.h"
@@ -10,17 +14,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <pthread.h>
 
-#define CHUNK_MS 10.0   /* 10ms scheduling granularity */
+#define OPS_PER_MEASUREMENT 1000000  /* Fixed 1M operations per measurement batch */
 
 /**
- * CPU load worker
+ * CPU load worker (single thread)
  * 
- * intensity: 0-100, percentage of time busy
+ * intensity: 0-100, duty cycle percentage
  * duration: seconds to run
  * cpu_id: CPU to pin to (-1 for no affinity)
+ * metrics: aggregated metrics structure
  */
-void cpu_load_worker(int intensity, int duration, int cpu_id) {
+void cpu_load_worker(int intensity, int duration, int cpu_id, ssp_metrics_t *metrics) {
     /* Pin to CPU if specified */
     if (cpu_id >= 0) {
         ssp_set_affinity(cpu_id);
@@ -41,34 +47,43 @@ void cpu_load_worker(int intensity, int duration, int cpu_id) {
         return;
     }
     
-    double work_frac = intensity / 100.0;
-    double sleep_frac = 1.0 - work_frac;
-    
     ssp_time_t deadline = ssp_now();
     deadline.tv_sec += duration;
     
     /* Volatile to prevent optimization */
     volatile double x = 1.0;
     
-    ssp_log(SSP_LOG_DEBUG, "CPU load: intensity=%d%%, duration=%ds, affinity=%d",
-            intensity, duration, cpu_id);
+    ssp_log(SSP_LOG_DEBUG, "CPU load: intensity=%d%% (duty cycle), duration=%ds, "
+            "ops_per_batch=%d, affinity=%d",
+            intensity, duration, OPS_PER_MEASUREMENT, cpu_id);
     
     while (ssp_time_cmp(ssp_now(), deadline) < 0 && !ssp_stop_flag) {
-        ssp_time_t phase_start = ssp_now();
+        uint64_t batch_start_ns = ssp_now_ns();
         
-        /* ── Busy phase ─────────────────────────────────────────────────────── */
-        /* Prevent compiler-level optimization via floating ops */
-        double chunk_us = CHUNK_MS * work_frac * 1000.0;
-        
-        while (ssp_time_diff_us(phase_start, ssp_now()) < chunk_us) {
+        /* Execute exactly OPS_PER_MEASUREMENT fixed operations */
+        for (uint64_t op = 0; op < OPS_PER_MEASUREMENT; op++) {
             /* CPU-bound arithmetic - high latency of sin/cos prevents ILP */
             x = sin(x + 0.001) * cos(x - 0.001) + x * 1.0000001;
         }
         
-        /* ── Idle phase ────────────────────────────────────────────────────── */
-        if (sleep_frac > 1e-6) {
-            useconds_t sleep_us = (useconds_t)(CHUNK_MS * sleep_frac * 1000.0);
-            usleep(sleep_us);
+        uint64_t batch_end_ns = ssp_now_ns();
+        
+        /* Record: OPS_PER_MEASUREMENT operations completed in (end - start) ns */
+        if (metrics) {
+            ssp_metrics_add_batch(metrics, OPS_PER_MEASUREMENT, batch_end_ns - batch_start_ns);
+        }
+        
+        /* Intensity affects duty cycle: idle time inversely proportional */
+        if (intensity < 100) {
+            /* Sleep time based on work time and desired intensity */
+            uint64_t work_ns = batch_end_ns - batch_start_ns;
+            double intensity_frac = intensity / 100.0;
+            double sleep_ns = (work_ns / intensity_frac) * (1.0 - intensity_frac);
+            
+            if (sleep_ns > 1000.0) {  /* Only sleep if >= 1 µs */
+                useconds_t sleep_us = (useconds_t)(sleep_ns / 1000.0);
+                usleep(sleep_us);
+            }
         }
     }
     

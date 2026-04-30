@@ -54,6 +54,14 @@ void print_latency_distribution(benchmark_record_t *records, int count);
 void print_classification_summary(benchmark_record_t *records, int count);
 void classify_performance(double ipc, double miss_rate, char *classification);
 
+static int cmp_double(const void *a, const void *b) {
+    double da = *(const double *)a;
+    double db = *(const double *)b;
+    if (da < db) return -1;
+    if (da > db) return 1;
+    return 0;
+}
+
 /**
  * Main entry point
  */
@@ -196,7 +204,7 @@ stats_t compute_stats(benchmark_record_t *records, int count, const char *worklo
     }
     
     /* Sort for percentile calculation */
-    qsort(latencies, n, sizeof(double), (int(*)(const void*, const void*))strcmp);
+    qsort(latencies, n, sizeof(double), cmp_double);
     
     /* Compute mean and std dev */
     double sum = 0, sum_sq = 0;

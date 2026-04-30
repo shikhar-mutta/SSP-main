@@ -9,7 +9,7 @@ echo "SSP Exhaustive Benchmark Suite"
 echo "=========================================="
 
 # ── Configuration ──────────────────────────────────────────────────────────
-ITERATIONS=3
+ITERATIONS=5
 DURATION=10
 INTENSITIES=(25 50 75)
 WORKLOADS=(cpu memory io mixed)
@@ -45,10 +45,7 @@ make -C src all
 # ── 2. Clear previous results (keep header) ─────────────────────────────────
 echo ""
 echo "[2/5] Clearing previous benchmark results..."
-if [ -f results/workload_benchmark.csv ]; then
-    head -1 results/workload_benchmark.csv > results/workload_benchmark.csv.tmp
-    mv results/workload_benchmark.csv.tmp results/workload_benchmark.csv
-fi
+rm -f results/workload_benchmark.csv
 
 # ── 3. Run benchmarks ────────────────────────────────────────────────────────
 echo ""

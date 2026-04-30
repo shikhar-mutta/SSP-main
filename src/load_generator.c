@@ -13,10 +13,10 @@
 #include <unistd.h>
 
 /* Forward declarations */
-void cpu_load_worker(int intensity, int duration, int cpu_id);
-void io_load_worker(int intensity, int duration);
-void memory_load_worker(int intensity, int duration, int cache_level);
-void mixed_load_worker(int intensity, int duration, int num_cpus);
+void cpu_load_worker(int intensity, int duration, int cpu_id, ssp_metrics_t *metrics);
+void io_load_worker(int intensity, int duration, ssp_metrics_t *metrics);
+void memory_load_worker(int intensity, int duration, int cache_level, ssp_metrics_t *metrics);
+void mixed_load_worker(int intensity, int duration, int num_cpus, ssp_metrics_t *metrics);
 
 /**
  * Display usage information
@@ -58,6 +58,7 @@ typedef struct {
     int cpu_id;
     int cache_level;
     int verbose;
+    char metrics_file[256];
     int valid;
 } args_t;
 
@@ -69,6 +70,7 @@ static args_t parse_args(int argc, char *argv[]) {
         .cpu_id = -1,
         .cache_level = 1,
         .verbose = 0,
+        .metrics_file = {0},
         .valid = 1
     };
     
@@ -78,6 +80,7 @@ static args_t parse_args(int argc, char *argv[]) {
         {"duration",    required_argument, 0, 'd'},
         {"cpu",         required_argument, 0, 'c'},
         {"cache-level", required_argument, 0, 'l'},
+        {"metrics-file", required_argument, 0, 'm'},
         {"verbose",     no_argument,       0, 'v'},
         {"help",        no_argument,       0, 'h'},
         {0, 0, 0, 0}
@@ -86,7 +89,7 @@ static args_t parse_args(int argc, char *argv[]) {
     int opt_index = 0;
     int opt;
     
-    while ((opt = getopt_long(argc, argv, "t:i:d:c:l:vh", 
+    while ((opt = getopt_long(argc, argv, "t:i:d:c:l:m:vh", 
                               long_options, &opt_index)) != -1) {
         switch (opt) {
             case 't':
@@ -103,6 +106,9 @@ static args_t parse_args(int argc, char *argv[]) {
                 break;
             case 'l':
                 args.cache_level = atoi(optarg);
+                break;
+            case 'm':
+                strncpy(args.metrics_file, optarg, sizeof(args.metrics_file) - 1);
                 break;
             case 'v':
                 args.verbose = 1;
@@ -159,6 +165,23 @@ static int validate_args(const args_t *args) {
     return 1;
 }
 
+static int write_metrics_file(const char *path, const ssp_metrics_t *m) {
+    FILE *fp = fopen(path, "w");
+    if (!fp) {
+        return -1;
+    }
+
+    fprintf(fp, "%llu,%llu,%.12Lf,%llu,%llu,%.12Lf\n",
+            (unsigned long long)m->operations,
+            (unsigned long long)m->total_latency_ns,
+            m->sum_latency_sq_ns,
+            (unsigned long long)m->io_cycles,
+            (unsigned long long)m->io_cycle_total_latency_ns,
+            m->io_cycle_sum_latency_sq_ns);
+    fclose(fp);
+    return 0;
+}
+
 /**
  * Main entry point
  */
@@ -189,17 +212,27 @@ int main(int argc, char *argv[]) {
     ssp_log(SSP_LOG_INFO, "SSP Load Generator started");
     ssp_log(SSP_LOG_INFO, "Type=%s Intensity=%d%% Duration=%ds", 
             args.load_type, args.intensity, args.duration);
+
+    ssp_metrics_t metrics;
+    ssp_metrics_init(&metrics);
     
     /* Dispatch to appropriate load generator */
     if (strcmp(args.load_type, "cpu") == 0) {
-        cpu_load_worker(args.intensity, args.duration, args.cpu_id);
+        cpu_load_worker(args.intensity, args.duration, args.cpu_id, &metrics);
     } else if (strcmp(args.load_type, "io") == 0) {
-        io_load_worker(args.intensity, args.duration);
+        io_load_worker(args.intensity, args.duration, &metrics);
     } else if (strcmp(args.load_type, "memory") == 0) {
-        memory_load_worker(args.intensity, args.duration, args.cache_level);
+        memory_load_worker(args.intensity, args.duration, args.cache_level, &metrics);
     } else if (strcmp(args.load_type, "mixed") == 0) {
         int num_cpus = ssp_get_cpu_count();
-        mixed_load_worker(args.intensity, args.duration, num_cpus);
+        mixed_load_worker(args.intensity, args.duration, num_cpus, &metrics);
+    }
+
+    if (args.metrics_file[0]) {
+        if (write_metrics_file(args.metrics_file, &metrics) != 0) {
+            ssp_log(SSP_LOG_ERROR, "Failed to write metrics file: %s", args.metrics_file);
+            return -1;
+        }
     }
     
     ssp_log(SSP_LOG_INFO, "Load generation complete");

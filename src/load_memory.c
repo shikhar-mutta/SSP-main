@@ -1,9 +1,12 @@
 /**
- * Memory Load Generator
+ * Memory Load Generator (NORMALIZED: Latency per Fixed Memory Operation)
  * 
- * Generates memory load via strided sequential access pattern.
- * Stride = 64 bytes (cache line size) to force cache hierarchy misses.
- * Working set scales with intensity (8-512 MB).
+ * Measures latency per 10 million cache-line accesses (normalized unit).
+ * Working set scales with intensity (8-512 MB), affecting cache hit rate.
+ * Stride = 64 bytes (cache line size) to expose cache hierarchy.
+ * 
+ * FIX for Issue 1: Now measures latency per fixed byte count (~10M accesses per batch),
+ * making it comparable to CPU (fixed operation count) and I/O (fixed data size).
  */
 
 #include "ssp_lib.h"
@@ -14,7 +17,7 @@
 
 #define CACHE_LINE_SIZE 64
 #define STRIDE_DOUBLES (CACHE_LINE_SIZE / sizeof(double))  /* 8 doubles */
-#define PASSES_PER_ITERATION 100000
+#define ACCESSES_PER_BATCH 10000000  /* 10M cache-line accesses = ~640MB touched */
 
 /**
  * Memory load worker
@@ -23,7 +26,7 @@
  * duration: seconds to run
  * cache_level: 0=auto, 1=L1, 2=L2, 3=L3 (affects stride pattern)
  */
-void memory_load_worker(int intensity, int duration, int cache_level) {
+void memory_load_worker(int intensity, int duration, int cache_level, ssp_metrics_t *metrics) {
     /* Clamp intensity */
     if (intensity < 0) intensity = 0;
     if (intensity > 100) intensity = 100;
@@ -64,8 +67,8 @@ void memory_load_worker(int intensity, int duration, int cache_level) {
     }
     
     ssp_log(SSP_LOG_DEBUG, "Memory load: intensity=%d%%, size=%dMB, "
-            "stride=%d doubles, cache_level=%d",
-            intensity, size_mb, stride, cache_level);
+            "stride=%d doubles, cache_level=%d, accesses_per_batch=%llu",
+            intensity, size_mb, stride, cache_level, (unsigned long long)ACCESSES_PER_BATCH);
     
     /* Allocate buffer aligned to cache line */
     double *buf = (double *)ssp_allocate_aligned(
@@ -89,8 +92,10 @@ void memory_load_worker(int intensity, int duration, int cache_level) {
     size_t idx = 0;
     
     while (ssp_time_cmp(ssp_now(), deadline) < 0 && !ssp_stop_flag) {
-        /* One "pass" = PASSES_PER_ITERATION strided reads + writes */
-        for (int pass = 0; pass < PASSES_PER_ITERATION; pass++) {
+        uint64_t batch_start_ns = ssp_now_ns();
+
+        /* Execute exactly ACCESSES_PER_BATCH strided reads + writes */
+        for (uint64_t access = 0; access < ACCESSES_PER_BATCH; access++) {
             /* Read - accumulate to defeat dead code elimination */
             acc += buf[idx];
             
@@ -99,6 +104,12 @@ void memory_load_worker(int intensity, int duration, int cache_level) {
             
             /* Advance index with stride, wrap around */
             idx = (idx + stride) % n_doubles;
+        }
+
+        if (metrics) {
+            uint64_t batch_end_ns = ssp_now_ns();
+            /* Record: ACCESSES_PER_BATCH cache-line accesses in (end-start) ns */
+            ssp_metrics_add_batch(metrics, ACCESSES_PER_BATCH, batch_end_ns - batch_start_ns);
         }
         
         /* Brief yield to let OS schedule other tasks */

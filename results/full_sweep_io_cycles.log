@@ -1,0 +1,485 @@
+==========================================
+SSP Exhaustive Benchmark Suite
+==========================================
+Hardware cores available : 14
+Core counts to benchmark : 1 2 4 8
+Workloads                : cpu memory io mixed
+Intensities              : 25 50 75
+Iterations per cell      : 5
+Duration per run (s)     : 10
+
+[1/5] Building executables...
+make: Entering directory '/home/shrinithi/Project/SSP-main/src'
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c load_cpu.c -o obj/load_cpu.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c load_io.c -o obj/load_io.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c load_memory.c -o obj/load_memory.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c load_mixed.c -o obj/load_mixed.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c load_generator.c -o obj/load_generator.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c ssp_lib.c -o obj/ssp_lib.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -o load_generator obj/load_cpu.o obj/load_io.o obj/load_memory.o obj/load_mixed.o obj/load_generator.o obj/ssp_lib.o -pthread -lm
+  ✓ Built load_generator
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c benchmark.c -o obj/benchmark.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c perf_events.c -o obj/perf_events.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c microarch.c -o obj/microarch.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -o benchmark obj/benchmark.o obj/perf_events.o obj/microarch.o obj/load_cpu.o obj/load_io.o obj/load_memory.o obj/load_mixed.o obj/ssp_lib.o -pthread -lm -lm
+  ✓ Built benchmark
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -c analysis.c -o obj/analysis.o
+gcc -Wall -Wextra -O2 -pthread -D_GNU_SOURCE -std=c99 -o analysis obj/analysis.o obj/microarch.o obj/ssp_lib.o -pthread -lm
+  ✓ Built analysis
+
+╔════════════════════════════════════════════════════════════════════╗
+║  ✓ SSP Benchmark Suite - All programs built successfully!          ║
+╚════════════════════════════════════════════════════════════════════╝
+
+make: Leaving directory '/home/shrinithi/Project/SSP-main/src'
+
+[2/5] Clearing previous benchmark results...
+
+[3/5] Running exhaustive benchmarks...
+
+>>> cores=1  workload=cpu  intensity=25%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=25%  cores=1  duration=10s
+[Run 2/5] workload=cpu  intensity=25%  cores=1  duration=10s
+[Run 3/5] workload=cpu  intensity=25%  cores=1  duration=10s
+[Run 4/5] workload=cpu  intensity=25%  cores=1  duration=10s
+[Run 5/5] workload=cpu  intensity=25%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=cpu  intensity=50%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=50%  cores=1  duration=10s
+[Run 2/5] workload=cpu  intensity=50%  cores=1  duration=10s
+[Run 3/5] workload=cpu  intensity=50%  cores=1  duration=10s
+[Run 4/5] workload=cpu  intensity=50%  cores=1  duration=10s
+[Run 5/5] workload=cpu  intensity=50%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=cpu  intensity=75%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=75%  cores=1  duration=10s
+[Run 2/5] workload=cpu  intensity=75%  cores=1  duration=10s
+[Run 3/5] workload=cpu  intensity=75%  cores=1  duration=10s
+[Run 4/5] workload=cpu  intensity=75%  cores=1  duration=10s
+[Run 5/5] workload=cpu  intensity=75%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=memory  intensity=25%  (5 iterations)
+[Run 1/5] workload=memory  intensity=25%  cores=1  duration=10s
+[Run 2/5] workload=memory  intensity=25%  cores=1  duration=10s
+[Run 3/5] workload=memory  intensity=25%  cores=1  duration=10s
+[Run 4/5] workload=memory  intensity=25%  cores=1  duration=10s
+[Run 5/5] workload=memory  intensity=25%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=memory  intensity=50%  (5 iterations)
+[Run 1/5] workload=memory  intensity=50%  cores=1  duration=10s
+[Run 2/5] workload=memory  intensity=50%  cores=1  duration=10s
+[Run 3/5] workload=memory  intensity=50%  cores=1  duration=10s
+[Run 4/5] workload=memory  intensity=50%  cores=1  duration=10s
+[Run 5/5] workload=memory  intensity=50%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=memory  intensity=75%  (5 iterations)
+[Run 1/5] workload=memory  intensity=75%  cores=1  duration=10s
+[Run 2/5] workload=memory  intensity=75%  cores=1  duration=10s
+[Run 3/5] workload=memory  intensity=75%  cores=1  duration=10s
+[Run 4/5] workload=memory  intensity=75%  cores=1  duration=10s
+[Run 5/5] workload=memory  intensity=75%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=io  intensity=25%  (5 iterations)
+[Run 1/5] workload=io  intensity=25%  cores=1  duration=10s
+[Run 2/5] workload=io  intensity=25%  cores=1  duration=10s
+[Run 3/5] workload=io  intensity=25%  cores=1  duration=10s
+[Run 4/5] workload=io  intensity=25%  cores=1  duration=10s
+[Run 5/5] workload=io  intensity=25%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=io  intensity=50%  (5 iterations)
+[Run 1/5] workload=io  intensity=50%  cores=1  duration=10s
+[Run 2/5] workload=io  intensity=50%  cores=1  duration=10s
+[Run 3/5] workload=io  intensity=50%  cores=1  duration=10s
+[Run 4/5] workload=io  intensity=50%  cores=1  duration=10s
+[Run 5/5] workload=io  intensity=50%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=io  intensity=75%  (5 iterations)
+[Run 1/5] workload=io  intensity=75%  cores=1  duration=10s
+[Run 2/5] workload=io  intensity=75%  cores=1  duration=10s
+[Run 3/5] workload=io  intensity=75%  cores=1  duration=10s
+[Run 4/5] workload=io  intensity=75%  cores=1  duration=10s
+[Run 5/5] workload=io  intensity=75%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=mixed  intensity=25%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=25%  cores=1  duration=10s
+[Run 2/5] workload=mixed  intensity=25%  cores=1  duration=10s
+[Run 3/5] workload=mixed  intensity=25%  cores=1  duration=10s
+[Run 4/5] workload=mixed  intensity=25%  cores=1  duration=10s
+[Run 5/5] workload=mixed  intensity=25%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=mixed  intensity=50%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=50%  cores=1  duration=10s
+[Run 2/5] workload=mixed  intensity=50%  cores=1  duration=10s
+[Run 3/5] workload=mixed  intensity=50%  cores=1  duration=10s
+[Run 4/5] workload=mixed  intensity=50%  cores=1  duration=10s
+[Run 5/5] workload=mixed  intensity=50%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=1  workload=mixed  intensity=75%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=75%  cores=1  duration=10s
+[Run 2/5] workload=mixed  intensity=75%  cores=1  duration=10s
+[Run 3/5] workload=mixed  intensity=75%  cores=1  duration=10s
+[Run 4/5] workload=mixed  intensity=75%  cores=1  duration=10s
+[Run 5/5] workload=mixed  intensity=75%  cores=1  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=cpu  intensity=25%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=25%  cores=2  duration=10s
+[Run 2/5] workload=cpu  intensity=25%  cores=2  duration=10s
+[Run 3/5] workload=cpu  intensity=25%  cores=2  duration=10s
+[Run 4/5] workload=cpu  intensity=25%  cores=2  duration=10s
+[Run 5/5] workload=cpu  intensity=25%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=cpu  intensity=50%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=50%  cores=2  duration=10s
+[Run 2/5] workload=cpu  intensity=50%  cores=2  duration=10s
+[Run 3/5] workload=cpu  intensity=50%  cores=2  duration=10s
+[Run 4/5] workload=cpu  intensity=50%  cores=2  duration=10s
+[Run 5/5] workload=cpu  intensity=50%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=cpu  intensity=75%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=75%  cores=2  duration=10s
+[Run 2/5] workload=cpu  intensity=75%  cores=2  duration=10s
+[Run 3/5] workload=cpu  intensity=75%  cores=2  duration=10s
+[Run 4/5] workload=cpu  intensity=75%  cores=2  duration=10s
+[Run 5/5] workload=cpu  intensity=75%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=memory  intensity=25%  (5 iterations)
+[Run 1/5] workload=memory  intensity=25%  cores=2  duration=10s
+[Run 2/5] workload=memory  intensity=25%  cores=2  duration=10s
+[Run 3/5] workload=memory  intensity=25%  cores=2  duration=10s
+[Run 4/5] workload=memory  intensity=25%  cores=2  duration=10s
+[Run 5/5] workload=memory  intensity=25%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=memory  intensity=50%  (5 iterations)
+[Run 1/5] workload=memory  intensity=50%  cores=2  duration=10s
+[Run 2/5] workload=memory  intensity=50%  cores=2  duration=10s
+[Run 3/5] workload=memory  intensity=50%  cores=2  duration=10s
+[Run 4/5] workload=memory  intensity=50%  cores=2  duration=10s
+[Run 5/5] workload=memory  intensity=50%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=memory  intensity=75%  (5 iterations)
+[Run 1/5] workload=memory  intensity=75%  cores=2  duration=10s
+[Run 2/5] workload=memory  intensity=75%  cores=2  duration=10s
+[Run 3/5] workload=memory  intensity=75%  cores=2  duration=10s
+[Run 4/5] workload=memory  intensity=75%  cores=2  duration=10s
+[Run 5/5] workload=memory  intensity=75%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=io  intensity=25%  (5 iterations)
+[Run 1/5] workload=io  intensity=25%  cores=2  duration=10s
+[Run 2/5] workload=io  intensity=25%  cores=2  duration=10s
+[Run 3/5] workload=io  intensity=25%  cores=2  duration=10s
+[Run 4/5] workload=io  intensity=25%  cores=2  duration=10s
+[Run 5/5] workload=io  intensity=25%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=io  intensity=50%  (5 iterations)
+[Run 1/5] workload=io  intensity=50%  cores=2  duration=10s
+[Run 2/5] workload=io  intensity=50%  cores=2  duration=10s
+[Run 3/5] workload=io  intensity=50%  cores=2  duration=10s
+[Run 4/5] workload=io  intensity=50%  cores=2  duration=10s
+[Run 5/5] workload=io  intensity=50%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=io  intensity=75%  (5 iterations)
+[Run 1/5] workload=io  intensity=75%  cores=2  duration=10s
+[Run 2/5] workload=io  intensity=75%  cores=2  duration=10s
+[Run 3/5] workload=io  intensity=75%  cores=2  duration=10s
+[Run 4/5] workload=io  intensity=75%  cores=2  duration=10s
+[Run 5/5] workload=io  intensity=75%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=mixed  intensity=25%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=25%  cores=2  duration=10s
+[Run 2/5] workload=mixed  intensity=25%  cores=2  duration=10s
+[Run 3/5] workload=mixed  intensity=25%  cores=2  duration=10s
+[Run 4/5] workload=mixed  intensity=25%  cores=2  duration=10s
+[Run 5/5] workload=mixed  intensity=25%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=mixed  intensity=50%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=50%  cores=2  duration=10s
+[Run 2/5] workload=mixed  intensity=50%  cores=2  duration=10s
+[Run 3/5] workload=mixed  intensity=50%  cores=2  duration=10s
+[Run 4/5] workload=mixed  intensity=50%  cores=2  duration=10s
+[Run 5/5] workload=mixed  intensity=50%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=2  workload=mixed  intensity=75%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=75%  cores=2  duration=10s
+[Run 2/5] workload=mixed  intensity=75%  cores=2  duration=10s
+[Run 3/5] workload=mixed  intensity=75%  cores=2  duration=10s
+[Run 4/5] workload=mixed  intensity=75%  cores=2  duration=10s
+[Run 5/5] workload=mixed  intensity=75%  cores=2  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=cpu  intensity=25%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=25%  cores=4  duration=10s
+[Run 2/5] workload=cpu  intensity=25%  cores=4  duration=10s
+[Run 3/5] workload=cpu  intensity=25%  cores=4  duration=10s
+[Run 4/5] workload=cpu  intensity=25%  cores=4  duration=10s
+[Run 5/5] workload=cpu  intensity=25%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=cpu  intensity=50%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=50%  cores=4  duration=10s
+[Run 2/5] workload=cpu  intensity=50%  cores=4  duration=10s
+[Run 3/5] workload=cpu  intensity=50%  cores=4  duration=10s
+[Run 4/5] workload=cpu  intensity=50%  cores=4  duration=10s
+[Run 5/5] workload=cpu  intensity=50%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=cpu  intensity=75%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=75%  cores=4  duration=10s
+[Run 2/5] workload=cpu  intensity=75%  cores=4  duration=10s
+[Run 3/5] workload=cpu  intensity=75%  cores=4  duration=10s
+[Run 4/5] workload=cpu  intensity=75%  cores=4  duration=10s
+[Run 5/5] workload=cpu  intensity=75%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=memory  intensity=25%  (5 iterations)
+[Run 1/5] workload=memory  intensity=25%  cores=4  duration=10s
+[Run 2/5] workload=memory  intensity=25%  cores=4  duration=10s
+[Run 3/5] workload=memory  intensity=25%  cores=4  duration=10s
+[Run 4/5] workload=memory  intensity=25%  cores=4  duration=10s
+[Run 5/5] workload=memory  intensity=25%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=memory  intensity=50%  (5 iterations)
+[Run 1/5] workload=memory  intensity=50%  cores=4  duration=10s
+[Run 2/5] workload=memory  intensity=50%  cores=4  duration=10s
+[Run 3/5] workload=memory  intensity=50%  cores=4  duration=10s
+[Run 4/5] workload=memory  intensity=50%  cores=4  duration=10s
+[Run 5/5] workload=memory  intensity=50%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=memory  intensity=75%  (5 iterations)
+[Run 1/5] workload=memory  intensity=75%  cores=4  duration=10s
+[Run 2/5] workload=memory  intensity=75%  cores=4  duration=10s
+[Run 3/5] workload=memory  intensity=75%  cores=4  duration=10s
+[Run 4/5] workload=memory  intensity=75%  cores=4  duration=10s
+[Run 5/5] workload=memory  intensity=75%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=io  intensity=25%  (5 iterations)
+[Run 1/5] workload=io  intensity=25%  cores=4  duration=10s
+[Run 2/5] workload=io  intensity=25%  cores=4  duration=10s
+[Run 3/5] workload=io  intensity=25%  cores=4  duration=10s
+[Run 4/5] workload=io  intensity=25%  cores=4  duration=10s
+[Run 5/5] workload=io  intensity=25%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=io  intensity=50%  (5 iterations)
+[Run 1/5] workload=io  intensity=50%  cores=4  duration=10s
+[Run 2/5] workload=io  intensity=50%  cores=4  duration=10s
+[Run 3/5] workload=io  intensity=50%  cores=4  duration=10s
+[Run 4/5] workload=io  intensity=50%  cores=4  duration=10s
+[Run 5/5] workload=io  intensity=50%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=io  intensity=75%  (5 iterations)
+[Run 1/5] workload=io  intensity=75%  cores=4  duration=10s
+[Run 2/5] workload=io  intensity=75%  cores=4  duration=10s
+[Run 3/5] workload=io  intensity=75%  cores=4  duration=10s
+[Run 4/5] workload=io  intensity=75%  cores=4  duration=10s
+[Run 5/5] workload=io  intensity=75%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=mixed  intensity=25%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=25%  cores=4  duration=10s
+[Run 2/5] workload=mixed  intensity=25%  cores=4  duration=10s
+[Run 3/5] workload=mixed  intensity=25%  cores=4  duration=10s
+[Run 4/5] workload=mixed  intensity=25%  cores=4  duration=10s
+[Run 5/5] workload=mixed  intensity=25%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=mixed  intensity=50%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=50%  cores=4  duration=10s
+[Run 2/5] workload=mixed  intensity=50%  cores=4  duration=10s
+[Run 3/5] workload=mixed  intensity=50%  cores=4  duration=10s
+[Run 4/5] workload=mixed  intensity=50%  cores=4  duration=10s
+[Run 5/5] workload=mixed  intensity=50%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=4  workload=mixed  intensity=75%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=75%  cores=4  duration=10s
+[Run 2/5] workload=mixed  intensity=75%  cores=4  duration=10s
+[Run 3/5] workload=mixed  intensity=75%  cores=4  duration=10s
+[Run 4/5] workload=mixed  intensity=75%  cores=4  duration=10s
+[Run 5/5] workload=mixed  intensity=75%  cores=4  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=cpu  intensity=25%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=25%  cores=8  duration=10s
+[Run 2/5] workload=cpu  intensity=25%  cores=8  duration=10s
+[Run 3/5] workload=cpu  intensity=25%  cores=8  duration=10s
+[Run 4/5] workload=cpu  intensity=25%  cores=8  duration=10s
+[Run 5/5] workload=cpu  intensity=25%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=cpu  intensity=50%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=50%  cores=8  duration=10s
+[Run 2/5] workload=cpu  intensity=50%  cores=8  duration=10s
+[Run 3/5] workload=cpu  intensity=50%  cores=8  duration=10s
+[Run 4/5] workload=cpu  intensity=50%  cores=8  duration=10s
+[Run 5/5] workload=cpu  intensity=50%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=cpu  intensity=75%  (5 iterations)
+[Run 1/5] workload=cpu  intensity=75%  cores=8  duration=10s
+[Run 2/5] workload=cpu  intensity=75%  cores=8  duration=10s
+[Run 3/5] workload=cpu  intensity=75%  cores=8  duration=10s
+[Run 4/5] workload=cpu  intensity=75%  cores=8  duration=10s
+[Run 5/5] workload=cpu  intensity=75%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=memory  intensity=25%  (5 iterations)
+[Run 1/5] workload=memory  intensity=25%  cores=8  duration=10s
+[Run 2/5] workload=memory  intensity=25%  cores=8  duration=10s
+[Run 3/5] workload=memory  intensity=25%  cores=8  duration=10s
+[Run 4/5] workload=memory  intensity=25%  cores=8  duration=10s
+[Run 5/5] workload=memory  intensity=25%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=memory  intensity=50%  (5 iterations)
+[Run 1/5] workload=memory  intensity=50%  cores=8  duration=10s
+[Run 2/5] workload=memory  intensity=50%  cores=8  duration=10s
+[Run 3/5] workload=memory  intensity=50%  cores=8  duration=10s
+[Run 4/5] workload=memory  intensity=50%  cores=8  duration=10s
+[Run 5/5] workload=memory  intensity=50%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=memory  intensity=75%  (5 iterations)
+[Run 1/5] workload=memory  intensity=75%  cores=8  duration=10s
+[Run 2/5] workload=memory  intensity=75%  cores=8  duration=10s
+[Run 3/5] workload=memory  intensity=75%  cores=8  duration=10s
+[Run 4/5] workload=memory  intensity=75%  cores=8  duration=10s
+[Run 5/5] workload=memory  intensity=75%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=io  intensity=25%  (5 iterations)
+[Run 1/5] workload=io  intensity=25%  cores=8  duration=10s
+[Run 2/5] workload=io  intensity=25%  cores=8  duration=10s
+[Run 3/5] workload=io  intensity=25%  cores=8  duration=10s
+[Run 4/5] workload=io  intensity=25%  cores=8  duration=10s
+[Run 5/5] workload=io  intensity=25%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=io  intensity=50%  (5 iterations)
+[Run 1/5] workload=io  intensity=50%  cores=8  duration=10s
+[Run 2/5] workload=io  intensity=50%  cores=8  duration=10s
+[Run 3/5] workload=io  intensity=50%  cores=8  duration=10s
+[Run 4/5] workload=io  intensity=50%  cores=8  duration=10s
+[Run 5/5] workload=io  intensity=50%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=io  intensity=75%  (5 iterations)
+[Run 1/5] workload=io  intensity=75%  cores=8  duration=10s
+[Run 2/5] workload=io  intensity=75%  cores=8  duration=10s
+[Run 3/5] workload=io  intensity=75%  cores=8  duration=10s
+[Run 4/5] workload=io  intensity=75%  cores=8  duration=10s
+[Run 5/5] workload=io  intensity=75%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=mixed  intensity=25%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=25%  cores=8  duration=10s
+[Run 2/5] workload=mixed  intensity=25%  cores=8  duration=10s
+[Run 3/5] workload=mixed  intensity=25%  cores=8  duration=10s
+[Run 4/5] workload=mixed  intensity=25%  cores=8  duration=10s
+[Run 5/5] workload=mixed  intensity=25%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=mixed  intensity=50%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=50%  cores=8  duration=10s
+[Run 2/5] workload=mixed  intensity=50%  cores=8  duration=10s
+[Run 3/5] workload=mixed  intensity=50%  cores=8  duration=10s
+[Run 4/5] workload=mixed  intensity=50%  cores=8  duration=10s
+[Run 5/5] workload=mixed  intensity=50%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+>>> cores=8  workload=mixed  intensity=75%  (5 iterations)
+[Run 1/5] workload=mixed  intensity=75%  cores=8  duration=10s
+[Run 2/5] workload=mixed  intensity=75%  cores=8  duration=10s
+[Run 3/5] workload=mixed  intensity=75%  cores=8  duration=10s
+[Run 4/5] workload=mixed  intensity=75%  cores=8  duration=10s
+[Run 5/5] workload=mixed  intensity=75%  cores=8  duration=10s
+Results appended to results/workload_benchmark.csv
+
+[4/5] Running statistical analysis...
+=== SSP Benchmark Analysis ===
+Loaded 240 records from results/workload_benchmark.csv
+
+=== Scaling Efficiency Graph ===
+Core Count vs. Latency (ASCII Graph)
+Cores      Mean(μs)  Graph                Classification
+------     --------   -----                -------------
+1          0.02       ░░░░░░░░░░░░░░░░░░░░ MIXED
+2          0.02       ░░░░░░░░░░░░░░░░░░░░ MIXED
+4          0.02       ░░░░░░░░░░░░░░░░░░░░ MIXED
+8          0.03       ░░░░░░░░░░░░░░░░░░░░ MIXED
+
+=== Tail Latency Analysis (P50, P95, P99) ===
+Workload        Mean       P50        P95        P99       
+-----------     ----       ---        ---        ---       
+cpu             0.06       0.06       0.06       0.06      
+memory          0.02       0.02       0.02       0.02      
+io              0.00       0.00       0.00       0.00      
+mixed           0.02       0.02       0.03       0.03      
+
+=== Performance Classification ===
+Workload        Cores      Intensity  IPC(est)        Classification
+-----------     -----      ---------  --------        -------------
+cpu             1          25         inf             MIXED
+cpu             1          75         inf             MEMORY_BOUND
+cpu             2          25         inf             MIXED
+cpu             2          75         inf             MEMORY_BOUND
+cpu             4          25         inf             MIXED
+cpu             4          75         inf             MEMORY_BOUND
+
+
+[5/5] Generating visualisation graphs...
+============================================================
+SSP Benchmark Results Visualization
+============================================================
+Loaded 240 records from results/workload_benchmark.csv
+
+Generating graphs...
+----------------------------------------
+  Saved: results/scaling_efficiency.png
+  Saved: results/latency_vs_intensity.png
+  Saved: results/workload_comparison.png
+  Saved: results/tail_latency_cpu.png
+  Saved: results/tail_latency_memory.png
+  Saved: results/tail_latency_io.png
+  Saved: results/tail_latency_mixed.png
+  Saved: results/latency_heatmap.png
+  Saved: results/summary_statistics.png
+  Saved: results/scheduling_analysis.png
+----------------------------------------
+
+All graphs saved to: results/
+============================================================
+
+==========================================
+Exhaustive benchmark complete!
+Total measurement cells : 48
+Total runs              : 240
+Results CSV             : results/workload_benchmark.csv
+Graphs                  : results/*.png
+==========================================

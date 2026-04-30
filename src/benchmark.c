@@ -2,10 +2,8 @@
  * SSP Benchmark Suite - Main Orchestrator
  *
  * Supports variable core counts (--cores N): spawns N parallel load_generator
- * processes to exercise multi-core scheduling.  Latency is derived from a
- * physics-based model (queueing theory + cache/IO hierarchy) so that results
- * show realistic, differentiated values across workload types, intensities,
- * and core counts.
+ * processes to exercise multi-core scheduling.  Latency is computed from real
+ * measured operation timings emitted by each child process.
  */
 
 #include <stdio.h>
@@ -14,8 +12,36 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <errno.h>
 #include <sys/wait.h>
 #include <sys/sysinfo.h>
+#include "ssp_lib.h"
+
+#define CSV_FILE "results/workload_benchmark.csv"
+#define MAX_CORES 64
+/**
+ * SSP Benchmark Suite - Main Orchestrator (with Scheduling Analysis)
+ *
+ * Supports variable core counts (--cores N): spawns N parallel load_generator
+ * processes to exercise multi-core scheduling.  Latency is computed from real
+ * measured operation timings emitted by each child process.
+ * 
+ * FIX for Issue 3: Integrates sched_switch tracing to capture context-switch
+ * events and correlate with latency for real scheduling insights.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+#include <errno.h>
+#include <sys/wait.h>
+#include <sys/sysinfo.h>
+#include <signal.h>
+#include "ssp_lib.h"
+#include "sched_tracer.h"
 
 #define CSV_FILE "results/workload_benchmark.csv"
 #define MAX_CORES 64
@@ -30,62 +56,30 @@ void print_usage(const char *prog) {
     printf("  C:         active core count (default: 1)\n");
 }
 
-/**
- * Compute per-operation latency (μs) using a physics-based model.
- *
- * CPU    – M/M/1 queueing: T = T_base / (1 − ρ),  ρ = intensity / (100 × cores)
- * Memory – Cache-hierarchy working-set model (8–512 MB → L3/DRAM range)
- * I/O    – Block-size model (1–128 KB, fsync dominates) with core contention
- * Mixed  – Weighted average of CPU and memory components
- */
-static double compute_latency_us(const char *type, int intensity, int active_cores, int run)
+static int read_metrics_file(const char *path, ssp_metrics_t *out)
 {
-    /* Per-run seed so repeated runs are independent but deterministic */
-    srand((unsigned)(time(NULL)) ^ (unsigned)(intensity * 7919u)
-          ^ (unsigned)(run * 31u) ^ (unsigned)((long)active_cores * 1009u));
+    FILE *fp = fopen(path, "r");
+    if (!fp) return -1;
 
-    double util = (double)intensity / (100.0 * active_cores);
-    if (util > 0.95) util = 0.95;
+    unsigned long long ops = 0ULL, total_ns = 0ULL;
+    unsigned long long io_cycles = 0ULL, io_cycle_total_ns = 0ULL;
+    long double sum_sq_ns = 0.0L, io_cycle_sum_sq_ns = 0.0L;
+    int rc = fscanf(fp, "%llu,%llu,%Lf,%llu,%llu,%Lf",
+                    &ops, &total_ns, &sum_sq_ns,
+                    &io_cycles, &io_cycle_total_ns, &io_cycle_sum_sq_ns);
+    fclose(fp);
 
-    double lat;
+    if (rc != 3 && rc != 6) return -1;
 
-    if (strcmp(type, "cpu") == 0) {
-        /* Context-switch / scheduling overhead: base 80 µs, saturates at high util */
-        lat = 80.0 / (1.0 - util);
-
-    } else if (strcmp(type, "memory") == 0) {
-        /* Working-set size 8–512 MB; all sets exceed L3 → DRAM accesses dominate.
-           Latency per strided pass scales linearly with set size.
-           Multiple cores contend for memory bandwidth (+15 % per extra core). */
-        int size_mb = 512 * intensity / 100;
-        if (size_mb < 8) size_mb = 8;
-        lat = 200.0 * (1.0 + (double)size_mb / 64.0);
-        lat *= (1.0 + 0.15 * (active_cores - 1));
-
-    } else if (strcmp(type, "io") == 0) {
-        /* Block size 1–128 KB; disk seek ~5 ms dominates small blocks,
-           transfer time dominates large blocks.
-           Multiple cores create I/O queue contention (+25 % per extra core). */
-        int block_kb = 128 * intensity / 100;
-        if (block_kb < 1) block_kb = 1;
-        lat = 5000.0 + block_kb * 220.0;
-        lat *= (1.0 + 0.25 * (active_cores - 1));
-
-    } else {
-        /* Mixed: half CPU-queuing + half memory-bandwidth components */
-        double cpu_util = util * 0.5;
-        if (cpu_util > 0.95) cpu_util = 0.95;
-        double cpu_lat = 80.0 / (1.0 - cpu_util);
-        int size_mb = 512 * intensity / 100;
-        if (size_mb < 8) size_mb = 8;
-        double mem_lat = 200.0 * (1.0 + (double)size_mb / 128.0);
-        lat = 0.5 * cpu_lat + 0.5 * mem_lat;
-        lat *= (1.0 + 0.10 * (active_cores - 1));
+    out->operations = (uint64_t)ops;
+    out->total_latency_ns = (uint64_t)total_ns;
+    out->sum_latency_sq_ns = sum_sq_ns;
+    if (rc == 6) {
+        out->io_cycles = (uint64_t)io_cycles;
+        out->io_cycle_total_latency_ns = (uint64_t)io_cycle_total_ns;
+        out->io_cycle_sum_latency_sq_ns = io_cycle_sum_sq_ns;
     }
-
-    /* Add ±3 % measurement noise */
-    double noise = 1.0 + ((rand() % 60) - 30) * 0.001;
-    return lat * noise;
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -132,7 +126,7 @@ int main(int argc, char *argv[]) {
     fseek(csv, 0, SEEK_END);
     if (ftell(csv) == 0) {
         fprintf(csv, "timestamp,os,hostname,total_cores,active_cores,workload_type,"
-                     "intensity_pct,data_size_kb,num_procs,latency_us,std_us,method,notes\n");
+                 "intensity_pct,data_size_kb,num_procs,latency_us,std_us,io_cycle_latency_us,io_cycle_std_us,method,sched_contention\n");
         fflush(csv);
     }
 
@@ -142,13 +136,30 @@ int main(int argc, char *argv[]) {
           fflush(stdout);   /* flush before fork so the child doesn't inherit a non-empty buffer */
 
           /* ── Spawn active_cores parallel load_generator processes ────────── */
+                /* ── Start scheduling trace (if available) ─────────────────────── */
+                sched_trace_t *sched_trace = NULL;
+                double sched_contention = 0.0;
+                if (getuid() == 0 || geteuid() == 0) {
+                    /* Root available: start bpftrace sched_switch tracing */
+                    char trace_name[32];
+                    snprintf(trace_name, sizeof(trace_name), "%s_run%d", type, run);
+                    sched_trace = sched_trace_start(trace_name);
+                    if (sched_trace) {
+                        fprintf(stderr, "[Scheduling trace started for run %d]\n", run);
+                    }
+                }
+
         char int_str[16], dur_str[16];
         snprintf(int_str, sizeof(int_str), "%d", intensity);
         snprintf(dur_str, sizeof(dur_str), "%d", duration);
 
         pid_t pids[MAX_CORES];
+        char metrics_paths[MAX_CORES][128];
         int spawned = 0;
         for (int c = 0; c < active_cores; c++) {
+            snprintf(metrics_paths[c], sizeof(metrics_paths[c]),
+                     "/tmp/ssp_metrics_%d_%d_%d.csv", getpid(), run, c);
+
             pid_t pid = fork();
             if (pid == 0) {
                 /* Child: redirect stdout/stderr to /dev/null to keep console clean */
@@ -156,7 +167,8 @@ int main(int argc, char *argv[]) {
                 freopen("/dev/null", "w", stderr);
                 execl("./src/load_generator", "./src/load_generator",
                       "--type", type, "--intensity", int_str,
-                      "--duration", dur_str, NULL);
+                      "--duration", dur_str,
+                      "--metrics-file", metrics_paths[c], NULL);
                 _exit(1);
             } else if (pid > 0) {
                 pids[spawned++] = pid;
@@ -167,9 +179,54 @@ int main(int argc, char *argv[]) {
             waitpid(pids[c], NULL, 0);
         }
 
-        /* ── Compute per-operation latency via physics model ─────────────── */
-        double latency_us = compute_latency_us(type, intensity, active_cores, run);
-        double std_us     = latency_us * (0.03 + (rand() % 30) * 0.001);
+        /* ── Stop scheduling trace ────────────────────────────────────── */
+        if (sched_trace) {
+            int sched_events = sched_trace_stop(sched_trace);
+            sched_contention = sched_trace_contention_score(sched_trace);
+            fprintf(stderr, "[Scheduling trace: %d events, contention=%.3f]\n", 
+                    sched_events, sched_contention);
+            sched_trace_free(sched_trace);
+        }
+
+        /* ── Aggregate measured metrics from children ─────────────────────── */
+        ssp_metrics_t total_metrics;
+        ssp_metrics_init(&total_metrics);
+
+        for (int c = 0; c < spawned; c++) {
+            ssp_metrics_t child;
+            ssp_metrics_init(&child);
+            if (read_metrics_file(metrics_paths[c], &child) == 0) {
+                ssp_metrics_merge(&total_metrics, &child);
+            }
+            unlink(metrics_paths[c]);
+        }
+
+        if (total_metrics.operations == 0) {
+            fprintf(stderr, "Warning: no measured operations collected for run %d (type=%s)\n", run, type);
+            continue;
+        }
+
+        long double mean_ns = (long double)total_metrics.total_latency_ns / (long double)total_metrics.operations;
+        long double second_moment = total_metrics.sum_latency_sq_ns / (long double)total_metrics.operations;
+        long double variance_ns2 = second_moment - mean_ns * mean_ns;
+        if (variance_ns2 < 0.0L) variance_ns2 = 0.0L;
+
+        double latency_us = (double)(mean_ns / 1000.0L);
+        double std_us = (double)(sqrt((double)variance_ns2) / 1000.0);
+        double io_cycle_latency_us = 0.0;
+        double io_cycle_std_us = 0.0;
+
+        if (total_metrics.io_cycles > 0) {
+            long double io_cycle_mean_ns =
+                (long double)total_metrics.io_cycle_total_latency_ns / (long double)total_metrics.io_cycles;
+            long double io_cycle_second_moment =
+                total_metrics.io_cycle_sum_latency_sq_ns / (long double)total_metrics.io_cycles;
+            long double io_cycle_variance_ns2 = io_cycle_second_moment - io_cycle_mean_ns * io_cycle_mean_ns;
+            if (io_cycle_variance_ns2 < 0.0L) io_cycle_variance_ns2 = 0.0L;
+
+            io_cycle_latency_us = (double)(io_cycle_mean_ns / 1000.0L);
+            io_cycle_std_us = (double)(sqrt((double)io_cycle_variance_ns2) / 1000.0L);
+        }
 
         /* ── Timestamp & write CSV row ─────────────────────────────────────── */
         time_t now = time(NULL);
@@ -181,10 +238,10 @@ int main(int argc, char *argv[]) {
         if (strcmp(type, "memory") == 0) data_size_kb = (512 * intensity / 100) * 1024;
         else if (strcmp(type, "io") == 0)  data_size_kb = 128 * intensity / 100;
 
-        fprintf(csv, "%s,Linux,%s,%d,%d,%s,%d,%d,%d,%.3f,%.3f,ssp_model,\n",
-                ts, hostname, total_cores, active_cores,
-                type, intensity, data_size_kb, active_cores,
-                latency_us, std_us);
+        fprintf(csv, "%s,Linux,%s,%d,%d,%s,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,measured_ops,%.6f\n",
+            ts, hostname, total_cores, active_cores,
+            type, intensity, data_size_kb, active_cores,
+            latency_us, std_us, io_cycle_latency_us, io_cycle_std_us, sched_contention);
         fflush(csv);
     }
 

@@ -65,7 +65,9 @@ def plot_scaling_efficiency(df, out_dir):
     cores_avail = sorted(df['active_cores'].unique())
     for wl, col in zip(workloads, COLORS):
         sub = df[df['workload_type'] == wl]
-        grp = sub.groupby('active_cores')['latency_us'].agg(['mean', 'std']).reindex(cores_avail)
+        # Use per-cycle latency for I/O, normalized latency for others
+        metric = 'io_cycle_latency_us' if wl == 'io' else 'latency_us'
+        grp = sub.groupby('active_cores')[metric].agg(['mean', 'std']).reindex(cores_avail)
         ax.errorbar(grp.index, grp['mean'], yerr=grp['std'],
                     marker='o', markersize=7, linewidth=2, capsize=4,
                     label=WORKLOAD_LABELS[wl], color=col)
@@ -94,9 +96,11 @@ def plot_latency_vs_intensity(df, out_dir):
     for idx, wl in enumerate(workloads):
         ax = axes[idx]
         sub = df[df['workload_type'] == wl]
+        # Use per-cycle latency for I/O, normalized latency for others
+        metric = 'io_cycle_latency_us' if wl == 'io' else 'latency_us'
         for c_idx, cores in enumerate(cores_list):
             csub = sub[sub['active_cores'] == cores]
-            grp = csub.groupby('intensity_pct')['latency_us'].agg(['mean', 'std']).reindex(intensities)
+            grp = csub.groupby('intensity_pct')[metric].agg(['mean', 'std']).reindex(intensities)
             ax.errorbar(grp.index, grp['mean'], yerr=grp['std'],
                         marker='s', markersize=6, linewidth=2, capsize=4,
                         label=f'{cores} core{"s" if cores > 1 else ""}',
@@ -130,8 +134,10 @@ def plot_workload_comparison(df, out_dir):
         vals, errs = [], []
         for wl in workloads:
             grp = sub[(sub['workload_type'] == wl) & (sub['intensity_pct'] == intensity)]
-            vals.append(grp['latency_us'].mean())
-            errs.append(grp['latency_us'].std())
+            # Use per-cycle latency for I/O, normalized latency for others
+            metric = 'io_cycle_latency_us' if wl == 'io' else 'latency_us'
+            vals.append(grp[metric].mean())
+            errs.append(grp[metric].std())
         offset = (i - n_int / 2 + 0.5) * width
         ax.bar(x + offset, vals, width, yerr=errs, capsize=3,
                label=f'Intensity {intensity}%',
@@ -160,10 +166,12 @@ def plot_tail_latency(df, out_dir):
     width = 0.22
     for wl in workloads:
         sub = df[df['workload_type'] == wl]
+        # Use per-cycle latency for I/O, normalized latency for others
+        metric = 'io_cycle_latency_us' if wl == 'io' else 'latency_us'
         x = np.arange(len(intensities))
         fig, ax = plt.subplots(figsize=(9, 5))
         for j, (plabel, pval, pcol) in enumerate(zip(pct_labels, pct_values, pct_colors)):
-            vals = [np.percentile(sub[sub['intensity_pct'] == i]['latency_us'], pval)
+            vals = [np.percentile(sub[sub['intensity_pct'] == i][metric], pval)
                     for i in intensities]
             offset = (j - 1) * width
             ax.bar(x + offset, vals, width, label=plabel,
@@ -191,12 +199,14 @@ def plot_latency_heatmap(df, out_dir):
     axes = np.array(axes).flatten()
     for idx, wl in enumerate(workloads):
         ax = axes[idx]
+        # Use per-cycle latency for I/O, normalized latency for others
+        metric = 'io_cycle_latency_us' if wl == 'io' else 'latency_us'
         matrix = np.zeros((len(intensities), len(cores_list)))
         for ri, intens in enumerate(intensities):
             for ci, cores in enumerate(cores_list):
                 cell = df[(df['workload_type'] == wl) &
                           (df['intensity_pct'] == intens) &
-                          (df['active_cores'] == cores)]['latency_us']
+                          (df['active_cores'] == cores)][metric]
                 matrix[ri, ci] = cell.mean() if len(cell) > 0 else np.nan
         vmin, vmax = np.nanmin(matrix), np.nanmax(matrix)
         norm = LogNorm(vmin=max(vmin, 1e-3), vmax=vmax) if vmax > vmin else None
@@ -228,7 +238,9 @@ def plot_summary_statistics(df, out_dir):
     workloads = [w for w in WORKLOAD_ORDER if w in df['workload_type'].unique()]
     rows = []
     for wl in workloads:
-        sub = df[df['workload_type'] == wl]['latency_us']
+        # Use per-cycle latency for I/O, normalized latency for others
+        metric = 'io_cycle_latency_us' if wl == 'io' else 'latency_us'
+        sub = df[df['workload_type'] == wl][metric]
         rows.append([
             WORKLOAD_LABELS[wl],
             f'{sub.mean():.1f}',
@@ -264,6 +276,50 @@ def plot_summary_statistics(df, out_dir):
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
+def plot_scheduling_analysis(df, out_dir):
+    """
+    Plot scheduling contention vs latency.
+    Visualizes correlation between context switches and latency variability.
+    (FIX for Issue 3: Scheduling insights)
+    """
+    if 'sched_contention' not in df.columns:
+        print("  ⊘ Scheduling contention data not available, skipping...")
+        return
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # Left: Contention vs Latency scatter
+    for i, wl in enumerate(WORKLOAD_ORDER):
+        wdf = df[df['workload_type'] == wl]
+        if len(wdf) > 0:
+            ax1.scatter(wdf['sched_contention'], wdf['latency_us'],
+                       label=WORKLOAD_LABELS.get(wl, wl),
+                       color=COLORS[i], s=100, alpha=0.6, edgecolors='black', linewidth=0.5)
+    ax1.set_xlabel('Scheduling Contention Score', fontsize=12)
+    ax1.set_ylabel('Latency (µs)', fontsize=12)
+    ax1.set_title('Scheduling Contention vs Latency', fontsize=13, fontweight='bold')
+    ax1.legend(loc='best', fontsize=10)
+    ax1.grid(True, alpha=0.3, linestyle='--')
+    
+    # Right: Contention by core count
+    for wl in WORKLOAD_ORDER:
+        wdf = df[df['workload_type'] == wl]
+        if len(wdf) > 0:
+            grouped = wdf.groupby('active_cores')['sched_contention'].mean()
+            ax2.plot(grouped.index, grouped.values, marker='o', 
+                    label=WORKLOAD_LABELS.get(wl, wl), linewidth=2, markersize=7)
+    ax2.set_xlabel('Active Cores', fontsize=12)
+    ax2.set_ylabel('Mean Scheduling Contention', fontsize=12)
+    ax2.set_title('Scheduling Contention vs Core Count', fontsize=13, fontweight='bold')
+    ax2.legend(loc='best', fontsize=10)
+    ax2.grid(True, alpha=0.3, linestyle='--')
+    
+    fig.tight_layout()
+    save(fig, os.path.join(out_dir, 'scheduling_analysis.png'))
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     csv_path = 'results/workload_benchmark.csv'
     out_dir  = 'results'
@@ -279,6 +335,7 @@ def main():
     plot_tail_latency(df, out_dir)
     plot_latency_heatmap(df, out_dir)
     plot_summary_statistics(df, out_dir)
+    plot_scheduling_analysis(df, out_dir)
     print('-' * 40)
     print(f'\nAll graphs saved to: {out_dir}/')
     print('=' * 60)

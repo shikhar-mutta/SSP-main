@@ -152,6 +152,47 @@ int ssp_madvise(void *addr, size_t size, int advice) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
+/* Metrics */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+void ssp_metrics_init(ssp_metrics_t *m) {
+    if (!m) return;
+    m->operations = 0;
+    m->total_latency_ns = 0;
+    m->sum_latency_sq_ns = 0.0L;
+    m->io_cycles = 0;
+    m->io_cycle_total_latency_ns = 0;
+    m->io_cycle_sum_latency_sq_ns = 0.0L;
+}
+
+void ssp_metrics_add_batch(ssp_metrics_t *m, uint64_t operations, uint64_t total_latency_ns) {
+    if (!m || operations == 0) return;
+
+    long double per_op_ns = (long double)total_latency_ns / (long double)operations;
+    m->operations += operations;
+    m->total_latency_ns += total_latency_ns;
+    m->sum_latency_sq_ns += (long double)operations * per_op_ns * per_op_ns;
+}
+
+void ssp_metrics_add_io_cycle(ssp_metrics_t *m, uint64_t cycle_latency_ns) {
+    if (!m) return;
+
+    m->io_cycles += 1;
+    m->io_cycle_total_latency_ns += cycle_latency_ns;
+    m->io_cycle_sum_latency_sq_ns += (long double)cycle_latency_ns * (long double)cycle_latency_ns;
+}
+
+void ssp_metrics_merge(ssp_metrics_t *dst, const ssp_metrics_t *src) {
+    if (!dst || !src) return;
+    dst->operations += src->operations;
+    dst->total_latency_ns += src->total_latency_ns;
+    dst->sum_latency_sq_ns += src->sum_latency_sq_ns;
+    dst->io_cycles += src->io_cycles;
+    dst->io_cycle_total_latency_ns += src->io_cycle_total_latency_ns;
+    dst->io_cycle_sum_latency_sq_ns += src->io_cycle_sum_latency_sq_ns;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 /* Logging */
 /* ─────────────────────────────────────────────────────────────────────────── */
 

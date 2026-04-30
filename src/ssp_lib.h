@@ -108,6 +108,39 @@ size_t ssp_get_page_size(void);
 int ssp_madvise(void *addr, size_t size, int advice);
 
 /* ─────────────────────────────────────────────────────────────────────────── */
+/* Measured Latency Metrics */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+typedef struct {
+    uint64_t operations;
+    uint64_t total_latency_ns;
+    long double sum_latency_sq_ns;
+    uint64_t io_cycles;
+    uint64_t io_cycle_total_latency_ns;
+    long double io_cycle_sum_latency_sq_ns;
+} ssp_metrics_t;
+
+/**
+ * Initialize metrics container.
+ */
+void ssp_metrics_init(ssp_metrics_t *m);
+
+/**
+ * Add a batch of operations with measured aggregate latency.
+ */
+void ssp_metrics_add_batch(ssp_metrics_t *m, uint64_t operations, uint64_t total_latency_ns);
+
+/**
+ * Add one measured I/O cycle latency (for write+fsync+read cycle reporting).
+ */
+void ssp_metrics_add_io_cycle(ssp_metrics_t *m, uint64_t cycle_latency_ns);
+
+/**
+ * Merge metrics from src into dst.
+ */
+void ssp_metrics_merge(ssp_metrics_t *dst, const ssp_metrics_t *src);
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 /* Signal Handling */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
