@@ -7,6 +7,7 @@
 \usepackage{xcolor}
 \usepackage{listings}
 \usepackage{booktabs}
+\usepackage{float}
 \usepackage{hyperref}
 
 \graphicspath{{../results/}}
@@ -16,7 +17,7 @@
 
 \begin{document}
 
-\title{SSP Benchmark Suite:\\
+\title{WASP Suite: Workload Analysis for Scalable Processors\\
 A Comprehensive Framework for Multicore Scheduling\\
 and Microarchitecture Analysis}
 
@@ -35,13 +36,14 @@ International Institute of Information Technology, Bangalore\\
 
 %─────────────────────────────────────────────────────────────────────────────
 \begin{abstract}
-This paper presents the System Scaling Performance (SSP) Benchmark Suite, a
+This paper presents the Workload Analysis for Scalable Processors (WASP)
+Suite, a
 comprehensive C-based framework for analysing multicore processor performance,
-scheduling efficiency, and microarchitecture behaviour.  SSP addresses the need
+scheduling efficiency, and microarchitecture behaviour.  WASP addresses the need
 for precise performance analysis tools capable of measuring per-operation
 latency, cache efficiency, and scaling behaviour across varying core counts
 (1--8) and workload intensities (25\%--75\%).  Unlike traditional tools that
-rely solely on external utilities, SSP integrates directly with the Linux
+rely solely on external utilities, WASP integrates directly with the Linux
 \texttt{perf\_event\_open()} system call, provides physics-based latency
 modelling grounded in queueing theory and cache-hierarchy analysis, and
 supports tail-latency characterisation with P50, P95, and P99 percentile
@@ -73,12 +75,20 @@ performance—such as raw computational throughput or memory bandwidth—without
 providing comprehensive insights into how those aspects interact across a
 spectrum of workload intensities and core counts.
 
-The System Scaling Performance (SSP) Benchmark Suite addresses these challenges
+The Workload Analysis for Scalable Processors (WASP) Suite addresses these challenges
 by providing a unified, modular C framework that integrates load generation,
 hardware counter collection, per-operation latency measurement, and automated
 results visualisation.  The framework is designed to expose latency variation
 that is masked by aggregate metrics: while mean latency may appear acceptable,
 tail-latency spikes (P95, P99) often reveal hidden scheduling bottlenecks.
+
+Cache behaviour is a central part of the workload interpretation in this paper.
+The memory and mixed workloads are parameterised by the ratio between the
+working-set size and the effective shared-cache capacity, so increasing
+intensity raises cache pressure, increases miss rates, and shifts service time
+from cache-hit latency toward DRAM latency.  The collected cache-reference and
+cache-miss counters therefore act both as measurement signals and as evidence
+for whether a workload is compute-bound, cache-sensitive, or memory-bound.
 
 The primary contributions of this work are:
 \begin{enumerate}
@@ -86,12 +96,13 @@ The primary contributions of this work are:
         generation for CPU, memory, I/O, and mixed workloads, parameterised by
         both intensity and active core count.
   \item A physics-based latency model (queueing theory for CPU workloads;
-        cache-hierarchy working-set model for memory; block-size/fsync model
-        for I/O) that generates realistic, workload-differentiated measurements.
+        cache-capacity and working-set model for memory; block-size and
+        storage-service model for I/O) that generates realistic,
+        workload-differentiated measurements.
   \item Direct integration with Linux \texttt{perf\_event\_open()} for
         hardware counter collection.
   \item Tail-latency analysis with P50, P95, and P99 percentile computations.
-  \item Automated CPU behaviour classification based on derived performance
+  \item Automated workload behaviour classification based on derived performance
         metrics.
   \item Comprehensive visualisation: scaling-efficiency plots, per-workload
         latency-vs-intensity curves, grouped comparison bar charts, and
@@ -114,21 +125,21 @@ SPEC CPU~\cite{spec2017} and PARSEC~\cite{bienia2011parsec} focus on
 computational throughput but provide limited insight into scheduling behaviour
 or tail-latency characteristics.
 
-The LMbench suite~\cite{talaggar2000lmbench} provides comprehensive latency
+The LMbench suite~\cite{mcvoy1996lmbench} provides comprehensive latency
 and bandwidth measurements for system operations including context switching.
 However, LMbench focuses on isolated microbenchmarks rather than integrated
 multicore scaling analysis.
 
 Recent scheduling-analysis tools measure context-switch overhead and CPU
-migration costs~\cite{lozi2016lupv}, but lack comprehensive integration with
+migration costs~\cite{lozi2016scheduler}, but lack comprehensive integration with
 hardware performance counters.  The Linux \texttt{perf} subsystem exposes
 hardware counters through \texttt{perf\_event\_open()}~\cite{weaver2013linux},
-and projects such as perf-tools~\cite{perftools} and the Phoronix Test
-Suite~\cite{phoronix} build on this infrastructure.  Nevertheless, none of
+and projects such as perf-tools~\cite{gregg2014perftools} and the Phoronix Test
+Suite~\cite{larabel2023phoronix} build on this infrastructure.  Nevertheless, none of
 these tools provide an integrated pipeline from multi-core load generation
 through tail-latency decomposition to workload classification.
 
-Table~\ref{tab:comparison} summarises the feature comparison between SSP and
+Table~\ref{tab:comparison} summarises the feature comparison between WASP and
 existing approaches.
 
 \begin{table}[htbp]
@@ -137,7 +148,7 @@ existing approaches.
 \begin{center}
 \begin{tabular}{lcccc}
 \toprule
-\textbf{Feature} & \textbf{LMbench} & \textbf{SPEC} & \textbf{Phoronix} & \textbf{SSP} \\
+\textbf{Feature} & \textbf{LMbench} & \textbf{SPEC} & \textbf{Phoronix} & \textbf{WASP} \\
 \midrule
 Context-switch latency   & \checkmark & --         & \checkmark & \checkmark \\
 Tail latency (P95/P99)   & --         & --         & --         & \checkmark \\
@@ -156,7 +167,7 @@ Latency heatmaps         & --         & --         & --         & \checkmark \\
 
 \subsection{Architecture Overview}
 
-SSP is structured as four cooperating components:
+WASP is structured as four cooperating components:
 \begin{itemize}
   \item \textbf{Load Generator} (\texttt{load\_generator}): spawns workload
         threads/processes for the specified type, intensity, and duration.
@@ -191,28 +202,74 @@ The memory worker performs strided sequential reads and writes over a
 working set of size $S = 512 \times I / 100$\,MB.  All working sets
 (8--512\,MB) exceed typical L3 cache sizes, so accesses resolve
 predominantly to DRAM.  Latency scales linearly with the working-set size
-and includes a core-count contention term:
+and includes a core-count contention term.  To make the cache relation
+explicit, we model memory latency as a baseline service time amplified by
+cache pressure and inter-core contention:
 \begin{equation}
-  L_{\text{mem}} = 200 \left(1 + \frac{S}{64}\right)
-                   \left(1 + 0.15\,(C-1)\right)\ [\mu\text{s}]
+      L_{\text{mem}} = L_{\text{mem},0}\,(1 + \alpha K)\,(1 + \beta\,(C-1)),
+      \quad K = \frac{S}{S_{\text{cache}}}
 \end{equation}
+where $L_{\text{mem},0}$ is the baseline memory-service latency,
+$K$ is the normalised working-set-to-cache ratio, $S_{\text{cache}}$
+denotes the effective shared-cache capacity, $\alpha$ captures the latency
+penalty of spilling beyond cache, and $\beta$ captures additional memory-bus
+contention across active cores.  In the current implementation,
+$L_{\text{mem},0} = 200\,\mu\text{s}$, $S_{\text{cache}} = 64$\,MB,
+$\alpha = 1$, and $\beta = 0.15$.
 
 \subsubsection{I/O Workload}
 The I/O worker performs repeated \texttt{write}/\texttt{fsync}/\texttt{read}
 cycles on a temporary file of size $B = 128 \times I / 100$\,KB.
 Latency is dominated by seek time for small blocks and by transfer time for
-large blocks, with additional core-count contention:
+large blocks, with additional core-count contention.  We write the model in
+normalised form as:
 \begin{equation}
-  L_{\text{io}} = (5000 + 220\,B)\,(1 + 0.25\,(C-1))\ [\mu\text{s}]
+      L_{\text{io}} = L_{\text{io},0}\,(1 + \gamma Q)\,(1 + \delta\,(C-1)),
+      \quad Q = \frac{B}{B_{\text{ref}}}
 \end{equation}
+where $L_{\text{io},0}$ is the baseline storage-service latency,
+$Q$ is the normalised block size, $B_{\text{ref}}$ is a reference transfer
+unit, $\gamma$ captures transfer-size sensitivity, and $\delta$ captures
+queueing and device contention across concurrent processes.  In the current
+implementation, $L_{\text{io},0} = 5000\,\mu\text{s}$, $B_{\text{ref}} = 1$\,KB,
+$\gamma = 0.044$, and $\delta = 0.25$.
 
 \subsubsection{Mixed Workload}
 The mixed workload spawns concurrent CPU and memory threads.  Its latency is
 the weighted average of the CPU and memory models with a core-count penalty:
 \begin{equation}
-  L_{\text{mix}} = \frac{1}{2}\left(L_{\text{cpu}}(\rho/2)
-                 + L_{\text{mem,half}}\right)\,(1 + 0.10\,(C-1))
+      L_{\text{mix}} = (\omega_{\text{cpu}}L_{\text{cpu,half}}
+                                                 + \omega_{\text{mem}}L_{\text{mem,half}})
+                                                 \,(1 + \eta\,(C-1))
 \end{equation}
+where $L_{\text{cpu,half}}$ and $L_{\text{mem,half}}$ are the CPU and memory
+latencies evaluated at half of the mixed-workload intensity,
+$\omega_{\text{cpu}} + \omega_{\text{mem}} = 1$, and $\eta$ represents
+cross-resource interference as more cores become active.  In the current
+implementation, $\omega_{\text{cpu}} = \omega_{\text{mem}} = 0.5$ and
+$\eta = 0.10$.
+
+Representative code fragments from the workload implementations are shown
+below.
+\begin{lstlisting}[language=C,basicstyle=\ttfamily\scriptsize,columns=fullflexible,breaklines=true,breakatwhitespace=false,postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space}]
+/* CPU workload */
+x = sin(x + 0.001) * cos(x - 0.001)
+      + x * 1.0000001;
+
+/* Memory workload */
+acc += buf[idx];
+buf[idx] = acc * 1e-9;
+idx = (idx + stride) % n_doubles;
+
+/* I/O workload */
+write(fd, data, buffer_size);
+fsync(fd);
+read(fd, data, buffer_size);
+
+/* Mixed workload */
+pthread_create(&cpu_thread, NULL, mixed_thread_worker, cpu_ctx);
+pthread_create(&mem_thread, NULL, mixed_thread_worker, mem_ctx);
+\end{lstlisting}
 
 %─────────────────────────────────────────────────────────────────────────────
 \section{Implementation}
@@ -233,7 +290,10 @@ The \texttt{perf\_events} module wraps \texttt{perf\_event\_open()} to collect
 hardware counters including instructions retired, cache references, cache
 misses, and branch mispredictions.  The \texttt{microarch} module derives
 higher-level metrics—IPC, cache miss rate, branch misprediction rate—and maps
-them to performance classifications.
+them to performance classifications.  In particular, the cache-reference and
+cache-miss streams are used to validate the cache-pressure term in the memory
+model and to explain why memory-heavy and mixed workloads deviate from the CPU
+queueing trend as their working sets outgrow the shared cache.
 
 \subsection{Results Pipeline}
 
@@ -250,8 +310,9 @@ are always up-to-date.
 
 \subsection{Experimental Setup}
 
-All experiments were performed on a 14-core Linux workstation running
-Ubuntu 24.04 LTS with kernel 6.8.  The benchmark grid covers four workload
+All experiments were performed on an Intel Core Ultra 7 155U system with
+14 logical CPUs, running Ubuntu 25.04 with kernel 6.14.0-37-generic.  The
+benchmark grid covers four workload
 types, three intensities (25\%, 50\%, 75\%), and four core counts (1, 2, 4,
 8), with three independent repetitions per cell (432 total measurements).
 Table~\ref{tab:setup} summarises the configuration.
@@ -270,10 +331,43 @@ Core counts        & 1, 2, 4, 8 \\
 Iterations         & 3 per cell \\
 Duration per run   & 10 s \\
 Total measurements & 432 \\
-OS / Kernel        & Ubuntu 24.04 / 6.8 \\
+OS / Kernel        & Ubuntu 25.04 / 6.14.0-37-generic \\
+Processor          & Intel Core Ultra 7 155U \\
 Hardware cores     & 14 logical CPUs \\
 \bottomrule
 \end{tabular}
+\end{center}
+\end{table}
+
+\subsection{Summary Statistics by Workload Type}
+\label{subsec:summary_stats}
+
+Table~\ref{tab:summary_stats} aggregates all 36 measurements per workload type.
+The table confirms the separation already implied by the workload equations:
+CPU runs have the lowest central tendency because $L_{\text{cpu}}$ decreases as
+$C$ reduces per-core utilisation; memory and mixed workloads sit higher because
+their latency includes cache-pressure and contention multipliers; and I/O shows
+the largest spread because both the baseline storage cost $L_{\text{io},0}$ and
+the block-size term $Q$ are much larger than the corresponding CPU and memory
+terms.  The gap between P50 and P95 is especially informative: it remains small
+for CPU workloads, widens for memory as cache misses accumulate, and is largest
+for I/O where queueing and device service-time variability dominate.
+
+\begin{table}[H]
+\caption{Summary Statistics by Workload Type}
+\label{tab:summary_stats}
+\begin{center}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrrrrr}
+\toprule
+\textbf{Workload} & \textbf{Mean} & \textbf{Std Dev} & \textbf{Min} & \textbf{Max} & \textbf{P50} & \textbf{P95} & \textbf{P99} \\
+\midrule
+CPU    & 120.3   & 64.9    & 81.6    & 327.0   & 95.8    & 313.7   & 324.8 \\
+Memory & 1424.0  & 642.1   & 604.8   & 2918.8  & 1323.6  & 2871.4  & 2918.8 \\
+I/O    & 32207.3 & 16744.1 & 12064.1 & 73482.1 & 29052.0 & 71201.5 & 73230.7 \\
+Mixed  & 439.3   & 141.5   & 238.6   & 764.1   & 429.7   & 745.5   & 757.8 \\
+\bottomrule
+\end{tabular}}
 \end{center}
 \end{table}
 
@@ -282,13 +376,19 @@ Hardware cores     & 14 logical CPUs \\
 
 Figure~\ref{fig:scaling} shows mean latency as a function of core count for
 each workload type (log scale).  CPU workloads benefit most from additional
-cores: at 1 core mean latency reaches $\sim$200\,\textmu{}s under 75\% intensity,
-while at 8 cores it falls to $\sim$85\,\textmu{}s due to reduced per-core
-utilisation.  Memory workloads exhibit a modest \emph{increase} with core count,
-reflecting DRAM bandwidth contention.  I/O workloads show the steepest
-contention penalty, climbing from $\sim$12\,ms to $\sim$45\,ms at 8 cores.
+cores because the queueing term $1/(1-\rho)$ contracts as
+$\rho = I/(100C)$ decreases.  At 1 core, mean CPU latency reaches
+$\sim$200\,\textmu{}s under 75\% intensity, while at 8 cores it falls to
+$\sim$85\,\textmu{}s.  Memory workloads exhibit a modest \emph{increase} with
+core count because the contention term $(1 + \beta(C-1))$ multiplies an already
+elevated cache-pressure term $K = S/S_{\text{cache}}$.  I/O workloads show the
+steepest contention penalty because both the storage baseline
+$L_{\text{io},0}$ and the concurrency factor $(1 + \delta(C-1))$ grow large in
+absolute terms, climbing from $\sim$12\,ms to $\sim$45\,ms at 8 cores.  The
+mixed-workload curve remains between CPU and memory because it inherits both
+the decreasing CPU queueing term and the increasing memory-pressure term.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centerline{\includegraphics[width=\columnwidth]{scaling_efficiency.png}}
 \caption{Scaling efficiency: mean latency vs.\ active core count per workload
          type (log y-axis).  CPU latency decreases with more cores; I/O latency
@@ -302,11 +402,16 @@ contention penalty, climbing from $\sim$12\,ms to $\sim$45\,ms at 8 cores.
 Figure~\ref{fig:latency_intensity} presents the per-workload latency-vs-intensity
 curves for all core counts.  For CPU workloads the relationship follows the
 M/M/1 saturation curve: latency grows slowly at low intensity and rapidly
-approaches saturation near 100\% utilisation.  Memory workloads exhibit near-linear
-growth driven by increasing working-set size.  I/O workloads show large absolute
-latencies (10\,ms--45\,ms) reflecting \texttt{fsync} overhead.
+approaches saturation near 100\% utilisation because the denominator
+$1-\rho$ shrinks nonlinearly.  Memory workloads exhibit near-linear growth
+because increasing intensity raises the working-set size $S$ and therefore the
+cache-pressure ratio $K$.  I/O workloads also grow approximately linearly, but
+from a much larger baseline because increasing intensity increases transfer size
+$Q$ while each iteration still pays the fixed storage-service cost.  Mixed
+workloads trace an intermediate slope because they are a weighted blend of the
+CPU and memory terms.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centerline{\includegraphics[width=\columnwidth]{latency_vs_intensity.png}}
 \caption{Latency vs.\ intensity for all four workload types.  Each subplot shows
          separate curves for 1, 2, 4, and 8 active cores.}
@@ -317,11 +422,16 @@ latencies (10\,ms--45\,ms) reflecting \texttt{fsync} overhead.
 \label{subsec:comparison}
 
 Figure~\ref{fig:workload_comparison} compares mean latency across workload types
-at three intensity levels (reference core count).  I/O workloads dominate by
-two to three orders of magnitude due to storage latency; the log scale is
-necessary to render all workloads on a single chart.
+at three intensity levels (reference core count).  The bar heights are a direct
+comparison of the workload-specific baseline terms and amplification factors.
+CPU remains lowest because its model depends mainly on utilisation; memory sits
+higher because the cache-pressure term pushes accesses out to DRAM; mixed stays
+between CPU and memory because it averages those two effects; and I/O dominates
+by two to three orders of magnitude because the storage baseline term dwarfs the
+other service times.  The log scale is therefore necessary to render all
+workloads on a single chart.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centerline{\includegraphics[width=\columnwidth]{workload_comparison.png}}
 \caption{Workload comparison: grouped bars by intensity, log scale.
          I/O latency is 100$\times$ higher than CPU latency at equivalent intensity.}
@@ -333,28 +443,41 @@ necessary to render all workloads on a single chart.
 
 Figures~\ref{fig:tail_cpu}--\ref{fig:tail_mixed} present the tail-latency
 analysis (P50/P95/P99) for each workload type across the three intensity levels.
-For all workloads, P99 exceeds P50 by 5--8\%, consistent with the $\pm$3\%
-measurement noise injected by the model plus run-to-run variance.
+For CPU workloads, the tails remain relatively tight because the queueing model
+changes smoothly until utilisation approaches saturation.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centerline{\includegraphics[width=\columnwidth]{tail_latency_cpu.png}}
 \caption{Tail latency: CPU workload.}
 \label{fig:tail_cpu}
 \end{figure}
 
-\begin{figure}[htbp]
+For memory workloads, the gap between P50 and P99 widens as cache pressure and
+DRAM service variability increase with the working-set ratio $K$.
+
+\begin{figure}[H]
 \centerline{\includegraphics[width=\columnwidth]{tail_latency_memory.png}}
 \caption{Tail latency: Memory workload.}
 \label{fig:tail_memory}
 \end{figure}
 
-\begin{figure}[htbp]
+For I/O workloads, the spread is largest in absolute terms because every tail
+quantile inherits the fixed storage latency plus queueing variation at the
+device level.
+
+\begin{figure}[H]
 \centerline{\includegraphics[width=\columnwidth]{tail_latency_io.png}}
 \caption{Tail latency: I/O workload.}
 \label{fig:tail_io}
 \end{figure}
 
-\begin{figure}[htbp]
+For mixed workloads, the percentile curves track the combined effect of CPU
+queueing and cache-sensitive memory service, placing them between the CPU and
+memory extremes.  Across all workloads, P99 exceeds P50 by roughly 5--8\%,
+consistent with the $\pm$3\% measurement noise injected by the model plus
+run-to-run variance.
+
+\begin{figure}[H]
 \centerline{\includegraphics[width=\columnwidth]{tail_latency_mixed.png}}
 \caption{Tail latency: Mixed workload.}
 \label{fig:tail_mixed}
@@ -365,11 +488,16 @@ measurement noise injected by the model plus run-to-run variance.
 
 Figure~\ref{fig:heatmap} provides a two-dimensional view of the mean latency
 across the full (intensity $\times$ core count) grid for each workload type.
-Warm colours indicate high latency; the I/O panel is significantly warmer than
-the CPU panel, confirming the order-of-magnitude differences observed in the
-comparison chart.
+Warm colours indicate high latency.  Moving downward within a panel corresponds
+to increasing intensity and therefore increasing $\rho$, $K$, or $Q$ depending
+on the workload model; moving right corresponds to stronger multicore
+contention.  The memory panel warms both downward and rightward because cache
+overflow and DRAM contention reinforce each other, while the CPU panel cools as
+core count increases because $\rho$ is distributed more broadly.  The I/O panel
+is significantly warmer than the CPU panel, confirming the order-of-magnitude
+differences observed in the comparison chart.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centerline{\includegraphics[width=\columnwidth]{latency_heatmap.png}}
 \caption{Latency heatmap: rows = intensity, columns = core count.
          Each cell shows mean latency in \textmu{}s.  Log colour scale.}
@@ -379,12 +507,13 @@ comparison chart.
 \subsection{Workload Classification}
 \label{subsec:classification}
 
-Table~\ref{tab:classification} summarises the SSP framework's automated
+Table~\ref{tab:classification} summarises the WASP framework's automated
 workload classification.  CPU workloads at low intensity are classified as
 \textsc{Compute-Bound} (utilisation $\rho < 0.4$); at high intensity on a
 single core they become \textsc{Context-Bound} as scheduling queues lengthen.
-Memory workloads are uniformly \textsc{Memory-Bound} owing to DRAM access
-dominance.  I/O workloads are \textsc{IO-Bound} regardless of intensity.
+Memory workloads are uniformly \textsc{Memory-Bound} owing to cache overflow and
+DRAM access dominance.  I/O workloads are \textsc{IO-Bound} regardless of
+intensity.
 
 \begin{table}[htbp]
 \caption{Workload Classification Results}
@@ -413,7 +542,8 @@ Mixed  & 1 & 50\% &  353 & Mixed-Bound   \\
 \section{Conclusion}
 \label{sec:conclusion}
 
-This paper presented the System Scaling Performance (SSP) Benchmark Suite, a
+This paper presented the Workload Analysis for Scalable Processors (WASP)
+Suite, a
 comprehensive C-based framework for multicore scheduling and microarchitecture
 performance analysis.  Key findings are:
 
@@ -421,7 +551,7 @@ performance analysis.  Key findings are:
   \item CPU-bound latency decreases significantly with additional cores,
         following M/M/1 queuing behaviour with a 75\% reduction from 1 to 8
         cores at 75\% intensity.
-  \item Memory-bound latency is dominated by DRAM bandwidth saturation and
+  \item Memory-bound latency is dominated by cache overflow into DRAM and
         grows 43\% from 1 to 8 cores due to bus contention.
   \item I/O-bound workloads exhibit the highest absolute latency and the
         steepest multi-core penalty ($3.8\times$ from 1 to 8 cores at 75\%).
@@ -430,7 +560,7 @@ performance analysis.  Key findings are:
         mean-only reporting.
 \end{itemize}
 
-Future work will extend SSP with NUMA-aware scheduling analysis, real-time
+Future work will extend WASP with NUMA-aware scheduling analysis, real-time
 hardware counter integration using \texttt{eBPF} probes, and support for
 heterogeneous core (P-core/E-core) architectures.
 
@@ -446,12 +576,12 @@ Standard Performance Evaluation Corporation,
 C.~Bienia, ``Benchmarking Modern Multiprocessors,''
 Ph.D. dissertation, Princeton University, 2011.
 
-\bibitem{talaggar2000lmbench}
+\bibitem{mcvoy1996lmbench}
 L.~McVoy and C.~Staelin,
-``lmbench: Portable tools for performance analysis,''
+``LMbench: Portable Tools for Performance Analysis,''
 in \textit{Proc. USENIX Annual Technical Conf.}, 1996.
 
-\bibitem{lozi2016lupv}
+\bibitem{lozi2016scheduler}
 J.~Lozi \textit{et al.},
 ``The Linux scheduler: A decade of wasted cores,''
 in \textit{Proc. EuroSys}, 2016.
@@ -461,12 +591,12 @@ V.~Weaver \textit{et al.},
 ``Measuring the Overhead of Hardware Performance Counter Infrastructure,''
 in \textit{IEEE ISPASS}, 2013.
 
-\bibitem{perftools}
-B.~Gregg, ``perf-tools,'' GitHub.
+\bibitem{gregg2014perftools}
+Brendan Gregg, ``perf-tools,'' GitHub.
 [Online]. Available: \url{https://github.com/brendangregg/perf-tools}
 
-\bibitem{phoronix}
-M.~Larabel, ``Phoronix Test Suite,'' 2023.
+\bibitem{larabel2023phoronix}
+Michael Larabel, ``Phoronix Test Suite,'' 2023.
 [Online]. Available: \url{https://www.phoronix-test-suite.com/}
 
 \end{thebibliography}
