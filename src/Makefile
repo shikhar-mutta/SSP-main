@@ -89,7 +89,7 @@ load_generator: $(LOAD_GEN_OBJS) $(COMMON_OBJS)
 
 # Link benchmark executable (uses worker modules but NOT load_generator.o)
 benchmark: $(BENCH_OBJS) $(COMMON_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) -lm
 	@echo "  ✓ Built benchmark"
 
 # Link analysis executable
