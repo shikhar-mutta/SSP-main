@@ -1,11 +1,10 @@
 /**
- * SSP Analysis Tool - Results Processing and Graph Generation
- * 
- * This tool processes benchmark CSV results and generates:
- * - Statistical analysis (mean, std-dev, min, max)
- * - Tail latency analysis (P50, P95, P99 percentiles)
- * - Scaling efficiency graphs (ASCII-based)
- * - Performance classification summaries
+ * SSP Analysis Tool - Unit-Aware Results Summary
+ *
+ * Reports three core views:
+ * 1) Unit latency per workload type
+ * 2) Throughput per workload type
+ * 3) Slowdown vs baseline (cores=1, intensity=25)
  */
 
 #include <stdio.h>
@@ -14,24 +13,21 @@
 #include <math.h>
 #include <getopt.h>
 
-#define MAX_RECORDS 1000
-#define MAX_LINE_LENGTH 512
+#define MAX_RECORDS 4096
+#define MAX_LINE_LENGTH 4096
+#define MAX_TOKENS 128
 
-/* Data structures */
 typedef struct {
-    char timestamp[64];
-    char os[32];
-    char hostname[32];
-    int total_cores;
-    int active_cores;
     char workload_type[32];
+    int active_cores;
     int intensity_pct;
-    int data_size_kb;
-    int num_procs;
-    double latency_us;
-    double std_us;
-    char method[32];
-    char notes[128];
+    char unit_label[32];
+    double unit_latency_us;
+    double unit_std_us;
+    double throughput_value;
+    char throughput_unit[32];
+    double slowdown_vs_baseline;
+    double io_cycle_latency_us;
 } benchmark_record_t;
 
 typedef struct {
@@ -39,316 +35,304 @@ typedef struct {
     double std_dev;
     double min;
     double max;
-    double p50;
-    double p95;
-    double p99;
     int count;
 } stats_t;
 
-/* Function prototypes */
-int load_csv(const char *filename, benchmark_record_t *records, int max_records);
-stats_t compute_stats(benchmark_record_t *records, int count, const char *workload, int cores);
-void print_ascii_bar(double value, double max_val, int width);
-void print_scaling_graph(benchmark_record_t *records, int count);
-void print_latency_distribution(benchmark_record_t *records, int count);
-void print_classification_summary(benchmark_record_t *records, int count);
-void classify_performance(double ipc, double miss_rate, char *classification);
-
-static int cmp_double(const void *a, const void *b) {
-    double da = *(const double *)a;
-    double db = *(const double *)b;
-    if (da < db) return -1;
-    if (da > db) return 1;
-    return 0;
+static int split_csv_line(char *line, char tokens[][128], int max_tokens) {
+    int n = 0;
+    char *saveptr = NULL;
+    char *tok = strtok_r(line, ",", &saveptr);
+    while (tok && n < max_tokens) {
+        strncpy(tokens[n], tok, sizeof(tokens[n]) - 1);
+        tokens[n][sizeof(tokens[n]) - 1] = '\0';
+        n++;
+        tok = strtok_r(NULL, ",", &saveptr);
+    }
+    return n;
 }
 
-/**
- * Main entry point
- */
-int main(int argc, char *argv[]) {
-    const char *filename = "results/workload_benchmark.csv";
-    int show_scaling = 0;
-    int show_latency = 0;
-    int show_classification = 0;
-    int show_all = 1;
-    
-    /* Parse command line options */
-    int opt;
-    while ((opt = getopt(argc, argv, "f:slcah")) != -1) {
-        switch (opt) {
-            case 'f':
-                filename = optarg;
-                break;
-            case 's':
-                show_scaling = 1;
-                show_all = 0;
-                break;
-            case 'l':
-                show_latency = 1;
-                show_all = 0;
-                break;
-            case 'c':
-                show_classification = 1;
-                show_all = 0;
-                break;
-            case 'a':
-                show_all = 1;
-                break;
-            case 'h':
-            default:
-                printf("SSP Analysis Tool - Graph Generation\n\n");
-                printf("Usage: %s [options]\n\n", argv[0]);
-                printf("Options:\n");
-                printf("  -f <file>    CSV file to analyze (default: results/workload_benchmark.csv)\n");
-                printf("  -s           Show scaling efficiency graph\n");
-                printf("  -l           Show tail latency distribution\n");
-                printf("  -c           Show performance classification\n");
-                printf("  -a           Show all analyses (default)\n");
-                printf("  -h           Show this help\n");
-                return 0;
-        }
+static int header_index(char tokens[][128], int count, const char *name) {
+    for (int i = 0; i < count; i++) {
+        if (strcmp(tokens[i], name) == 0) return i;
     }
-    
-    /* Load CSV data */
-    benchmark_record_t records[MAX_RECORDS];
-    int count = load_csv(filename, records, MAX_RECORDS);
-    
-    if (count <= 0) {
-        fprintf(stderr, "Error: No data loaded from %s\n", filename);
-        return 1;
-    }
-    
-    printf("=== SSP Benchmark Analysis ===\n");
-    printf("Loaded %d records from %s\n\n", count, filename);
-    
-    /* Show scaling graph */
-    if (show_all || show_scaling) {
-        printf("=== Scaling Efficiency Graph ===\n");
-        print_scaling_graph(records, count);
-        printf("\n");
-    }
-    
-    /* Show latency distribution */
-    if (show_all || show_latency) {
-        printf("=== Tail Latency Analysis (P50, P95, P99) ===\n");
-        print_latency_distribution(records, count);
-        printf("\n");
-    }
-    
-    /* Show classification */
-    if (show_all || show_classification) {
-        printf("=== Performance Classification ===\n");
-        print_classification_summary(records, count);
-        printf("\n");
-    }
-    
-    return 0;
+    return -1;
 }
 
-/**
- * Load CSV data into records
- */
-int load_csv(const char *filename, benchmark_record_t *records, int max_records) {
+static double parse_double_or_zero(const char *s) {
+    if (!s || !*s) return 0.0;
+    return atof(s);
+}
+
+static int parse_int_or_zero(const char *s) {
+    if (!s || !*s) return 0;
+    return atoi(s);
+}
+
+static int load_csv(const char *filename, benchmark_record_t *records, int max_records) {
     FILE *fp = fopen(filename, "r");
     if (!fp) {
         return -1;
     }
-    
+
     char line[MAX_LINE_LENGTH];
+    if (!fgets(line, sizeof(line), fp)) {
+        fclose(fp);
+        return -1;
+    }
+
+    char header_line[MAX_LINE_LENGTH];
+    strncpy(header_line, line, sizeof(header_line) - 1);
+    header_line[sizeof(header_line) - 1] = '\0';
+
+    char headers[MAX_TOKENS][128];
+    int hcount = split_csv_line(header_line, headers, MAX_TOKENS);
+
+    int idx_workload = header_index(headers, hcount, "workload_type");
+    int idx_cores = header_index(headers, hcount, "active_cores");
+    int idx_intensity = header_index(headers, hcount, "intensity_pct");
+    int idx_unit_label = header_index(headers, hcount, "unit_label");
+    int idx_unit_latency = header_index(headers, hcount, "unit_latency_us");
+    int idx_unit_std = header_index(headers, hcount, "unit_std_us");
+    int idx_throughput = header_index(headers, hcount, "throughput_value");
+    int idx_throughput_unit = header_index(headers, hcount, "throughput_unit");
+    int idx_slowdown = header_index(headers, hcount, "slowdown_vs_baseline");
+    int idx_io_cycle = header_index(headers, hcount, "io_cycle_latency_us");
+
+    int idx_latency = header_index(headers, hcount, "latency_us");
+    int idx_std = header_index(headers, hcount, "std_us");
+
+    if (idx_workload < 0 || idx_cores < 0 || idx_intensity < 0) {
+        fclose(fp);
+        return -1;
+    }
+
     int count = 0;
-    
-    /* Skip header line */
-    if (fgets(line, sizeof(line), fp)) {
-        /* Header found */
-    }
-    
-    /* Read data lines */
     while (fgets(line, sizeof(line), fp) && count < max_records) {
-        benchmark_record_t *r = &records[count];
-        int fields = sscanf(line, "%63[^,],%31[^,],%31[^,],%d,%d,%31[^,],%d,%d,%d,%lf,%lf,%31[^,],%127[^,]",
-            r->timestamp, r->os, r->hostname,
-            &r->total_cores, &r->active_cores,
-            r->workload_type, &r->intensity_pct,
-            &r->data_size_kb, &r->num_procs,
-            &r->latency_us, &r->std_us,
-            r->method, r->notes);
-        
-        if (fields >= 10) {
-            count++;
+        char row[MAX_LINE_LENGTH];
+        strncpy(row, line, sizeof(row) - 1);
+        row[sizeof(row) - 1] = '\0';
+
+        char tokens[MAX_TOKENS][128];
+        int tcount = split_csv_line(row, tokens, MAX_TOKENS);
+
+        if (tcount <= idx_intensity || tcount <= idx_workload || tcount <= idx_cores) {
+            continue;
         }
+
+        benchmark_record_t *r = &records[count];
+        memset(r, 0, sizeof(*r));
+
+        strncpy(r->workload_type, tokens[idx_workload], sizeof(r->workload_type) - 1);
+        r->active_cores = parse_int_or_zero(tokens[idx_cores]);
+        r->intensity_pct = parse_int_or_zero(tokens[idx_intensity]);
+
+        if (idx_unit_label >= 0 && idx_unit_label < tcount) {
+            strncpy(r->unit_label, tokens[idx_unit_label], sizeof(r->unit_label) - 1);
+        }
+        if (idx_unit_latency >= 0 && idx_unit_latency < tcount) {
+            r->unit_latency_us = parse_double_or_zero(tokens[idx_unit_latency]);
+        }
+        if (idx_unit_std >= 0 && idx_unit_std < tcount) {
+            r->unit_std_us = parse_double_or_zero(tokens[idx_unit_std]);
+        }
+        if (idx_throughput >= 0 && idx_throughput < tcount) {
+            r->throughput_value = parse_double_or_zero(tokens[idx_throughput]);
+        }
+        if (idx_throughput_unit >= 0 && idx_throughput_unit < tcount) {
+            strncpy(r->throughput_unit, tokens[idx_throughput_unit], sizeof(r->throughput_unit) - 1);
+        }
+        if (idx_slowdown >= 0 && idx_slowdown < tcount) {
+            r->slowdown_vs_baseline = parse_double_or_zero(tokens[idx_slowdown]);
+        }
+        if (idx_io_cycle >= 0 && idx_io_cycle < tcount) {
+            r->io_cycle_latency_us = parse_double_or_zero(tokens[idx_io_cycle]);
+        }
+
+        /* Backward compatibility with older CSV schemas */
+        if (r->unit_latency_us <= 0.0 && idx_latency >= 0 && idx_latency < tcount) {
+            r->unit_latency_us = parse_double_or_zero(tokens[idx_latency]);
+        }
+        if (r->unit_std_us <= 0.0 && idx_std >= 0 && idx_std < tcount) {
+            r->unit_std_us = parse_double_or_zero(tokens[idx_std]);
+        }
+        if (strcmp(r->workload_type, "io") == 0 && r->unit_latency_us <= 0.0 && r->io_cycle_latency_us > 0.0) {
+            r->unit_latency_us = r->io_cycle_latency_us;
+            strncpy(r->unit_label, "time/cycle", sizeof(r->unit_label) - 1);
+        }
+
+        if (r->unit_label[0] == '\0') {
+            if (strcmp(r->workload_type, "memory") == 0) {
+                strncpy(r->unit_label, "time/access", sizeof(r->unit_label) - 1);
+            } else if (strcmp(r->workload_type, "io") == 0) {
+                strncpy(r->unit_label, "time/cycle", sizeof(r->unit_label) - 1);
+            } else {
+                strncpy(r->unit_label, "time/op", sizeof(r->unit_label) - 1);
+            }
+        }
+
+        if (r->throughput_unit[0] == '\0') {
+            if (strcmp(r->workload_type, "memory") == 0) {
+                strncpy(r->throughput_unit, "access/s", sizeof(r->throughput_unit) - 1);
+            } else if (strcmp(r->workload_type, "io") == 0) {
+                strncpy(r->throughput_unit, "MB/s", sizeof(r->throughput_unit) - 1);
+            } else {
+                strncpy(r->throughput_unit, "ops/s", sizeof(r->throughput_unit) - 1);
+            }
+        }
+
+        count++;
     }
-    
+
     fclose(fp);
     return count;
 }
 
-/**
- * Compute statistics including tail latency percentiles
- */
-stats_t compute_stats(benchmark_record_t *records, int count, const char *workload, int cores) {
-    stats_t stats = {0};
-    double *latencies = malloc(count * sizeof(double));
-    int n = 0;
-    
-    /* Collect matching records */
-    for (int i = 0; i < count; i++) {
-        if ((workload == NULL || strcmp(records[i].workload_type, workload) == 0) &&
-            (cores <= 0 || records[i].active_cores == cores)) {
-            latencies[n++] = records[i].latency_us;
-        }
-    }
-    
-    if (n == 0) {
-        free(latencies);
-        return stats;
-    }
-    
-    /* Sort for percentile calculation */
-    qsort(latencies, n, sizeof(double), cmp_double);
-    
-    /* Compute mean and std dev */
-    double sum = 0, sum_sq = 0;
-    stats.min = latencies[0];
-    stats.max = latencies[n-1];
-    
+static stats_t compute_stats(const double *vals, int n) {
+    stats_t st = {0};
+    if (n <= 0) return st;
+
+    st.min = vals[0];
+    st.max = vals[0];
+
+    double sum = 0.0;
+    double sum_sq = 0.0;
     for (int i = 0; i < n; i++) {
-        sum += latencies[i];
-        sum_sq += latencies[i] * latencies[i];
+        double v = vals[i];
+        sum += v;
+        sum_sq += v * v;
+        if (v < st.min) st.min = v;
+        if (v > st.max) st.max = v;
     }
-    
-    stats.mean = sum / n;
-    double variance = (sum_sq / n) - (stats.mean * stats.mean);
-    stats.std_dev = sqrt(variance > 0 ? variance : 0);
-    
-    /* Compute percentiles (tail latency) */
-    if (n > 0) {
-        stats.p50 = latencies[(int)(n * 0.50)];
-        stats.p95 = latencies[(int)(n * 0.95)];
-        stats.p99 = latencies[(int)(n * 0.99)];
-    }
-    
-    stats.count = n;
-    free(latencies);
-    
-    return stats;
+
+    st.mean = sum / (double)n;
+    double var = (sum_sq / (double)n) - (st.mean * st.mean);
+    if (var < 0.0) var = 0.0;
+    st.std_dev = sqrt(var);
+    st.count = n;
+    return st;
 }
 
-/**
- * Print ASCII bar chart
- */
-void print_ascii_bar(double value, double max_val, int width) {
-    int bars = (int)((value / max_val) * width);
-    if (bars > width) bars = width;
-    if (bars < 0) bars = 0;
-    
-    for (int i = 0; i < bars; i++) {
-        printf("█");
-    }
-    for (int i = bars; i < width; i++) {
-        printf("░");
-    }
-}
+static void print_unit_latency_view(benchmark_record_t *records, int count) {
+    const char *workloads[] = {"cpu", "memory", "io", "mixed"};
+    int nw = (int)(sizeof(workloads) / sizeof(workloads[0]));
 
-/**
- * Print scaling efficiency graph
- */
-void print_scaling_graph(benchmark_record_t *records, int count) {
-    printf("Core Count vs. Latency (ASCII Graph)\n");
-    printf("%-10s %-10s %-20s %s\n", "Cores", "Mean(μs)", "Graph", "Classification");
-    printf("%-10s %-10s %-20s %s\n", "------", "--------", "-----", "-------------");
-    
-    /* Group by core count */
-    for (int cores = 1; cores <= 8; cores *= 2) {
-        stats_t stats = compute_stats(records, count, NULL, cores);
-        
-        if (stats.count > 0) {
-            char classification[32];
-            double estimated_ipc = 1.0 / (stats.mean / 10.0);  /* Rough estimate */
-            double estimated_miss_rate = 0.1;  /* Placeholder */
-            classify_performance(estimated_ipc, estimated_miss_rate, classification);
-            
-            printf("%-10d %-10.2f ", cores, stats.mean);
-            print_ascii_bar(stats.mean, 20.0, 20);
-            printf(" %s\n", classification);
-        }
-    }
-}
+    printf("=== View 1: Unit Latency Per Workload ===\n");
+    printf("%-10s %-14s %-14s %-14s %-14s\n", "Workload", "Unit", "Mean(us)", "Std(us)", "Samples");
+    printf("%-10s %-14s %-14s %-14s %-14s\n", "--------", "----", "--------", "-------", "-------");
 
-/**
- * Print tail latency distribution
- */
-void print_latency_distribution(benchmark_record_t *records, int count) {
-    printf("%-15s %-10s %-10s %-10s %-10s\n", "Workload", "Mean", "P50", "P95", "P99");
-    printf("%-15s %-10s %-10s %-10s %-10s\n", "-----------", "----", "---", "---", "---");
-    
-    const char *workloads[] = {"baseline", "cpu", "memory", "io", "mixed"};
-    int num_workloads = sizeof(workloads) / sizeof(workloads[0]);
-    
-    for (int w = 0; w < num_workloads; w++) {
-        stats_t stats = compute_stats(records, count, workloads[w], -1);
-        
-        if (stats.count > 0) {
-            printf("%-15s %-10.2f %-10.2f %-10.2f %-10.2f\n",
-                workloads[w], stats.mean, stats.p50, stats.p95, stats.p99);
-        }
-    }
-}
+    for (int w = 0; w < nw; w++) {
+        double vals[MAX_RECORDS];
+        int n = 0;
+        char unit_label[32] = "";
 
-/**
- * Print performance classification summary
- */
-void print_classification_summary(benchmark_record_t *records, int count) {
-    printf("%-15s %-10s %-10s %-15s %s\n", "Workload", "Cores", "Intensity", "IPC(est)", "Classification");
-    printf("%-15s %-10s %-10s %-15s %s\n", "-----------", "-----", "---------", "--------", "-------------");
-    
-    /* Sample key configurations */
-    for (int cores = 1; cores <= 4; cores *= 2) {
-        for (int intensity = 25; intensity <= 75; intensity += 50) {
-            int found = 0;
-            double total_ipc = 0;
-            int n = 0;
-            char workload[32] = "";
-            
-            for (int i = 0; i < count; i++) {
-                if (records[i].active_cores == cores && 
-                    records[i].intensity_pct == intensity) {
-                    
-                    if (!found) {
-                        strcpy(workload, records[i].workload_type);
-                        found = 1;
-                    }
-                    
-                    /* Estimate IPC from latency (inverse relationship) */
-                    double estimated_ipc = 10.0 / records[i].latency_us;
-                    total_ipc += estimated_ipc;
-                    n++;
-                }
-            }
-            
-            if (found && n > 0) {
-                double avg_ipc = total_ipc / n;
-                double miss_rate = 0.1 + (intensity / 100.0) * 0.15;
-                char classification[32];
-                classify_performance(avg_ipc, miss_rate, classification);
-                
-                printf("%-15s %-10d %-10d %-15.2f %s\n",
-                    workload, cores, intensity, avg_ipc, classification);
+        for (int i = 0; i < count; i++) {
+            if (strcmp(records[i].workload_type, workloads[w]) != 0) continue;
+            if (records[i].unit_latency_us <= 0.0) continue;
+            vals[n++] = records[i].unit_latency_us;
+            if (unit_label[0] == '\0') {
+                strncpy(unit_label, records[i].unit_label, sizeof(unit_label) - 1);
             }
         }
+
+        if (n > 0) {
+            stats_t st = compute_stats(vals, n);
+            printf("%-10s %-14s %-14.6f %-14.6f %-14d\n",
+                   workloads[w], unit_label[0] ? unit_label : "n/a", st.mean, st.std_dev, st.count);
+        }
     }
+    printf("\n");
 }
 
-/**
- * Classify performance based on metrics
- */
-void classify_performance(double ipc, double miss_rate, char *classification) {
-    if (ipc < 0.5) {
-        strcpy(classification, "ILP_LIMITED");
-    } else if (miss_rate > 0.20) {
-        strcpy(classification, "MEMORY_BOUND");
-    } else if (ipc > 1.5 && miss_rate < 0.10) {
-        strcpy(classification, "COMPUTE_OPTIMAL");
-    } else {
-        strcpy(classification, "MIXED");
+static void print_throughput_view(benchmark_record_t *records, int count) {
+    const char *workloads[] = {"cpu", "memory", "io", "mixed"};
+    int nw = (int)(sizeof(workloads) / sizeof(workloads[0]));
+
+    printf("=== View 2: Throughput Per Workload ===\n");
+    printf("%-10s %-14s %-14s %-14s %-14s\n", "Workload", "Unit", "Mean", "Std", "Samples");
+    printf("%-10s %-14s %-14s %-14s %-14s\n", "--------", "----", "----", "---", "-------");
+
+    for (int w = 0; w < nw; w++) {
+        double vals[MAX_RECORDS];
+        int n = 0;
+        char unit[32] = "";
+
+        for (int i = 0; i < count; i++) {
+            if (strcmp(records[i].workload_type, workloads[w]) != 0) continue;
+            if (records[i].throughput_value <= 0.0) continue;
+            vals[n++] = records[i].throughput_value;
+            if (unit[0] == '\0') {
+                strncpy(unit, records[i].throughput_unit, sizeof(unit) - 1);
+            }
+        }
+
+        if (n > 0) {
+            stats_t st = compute_stats(vals, n);
+            printf("%-10s %-14s %-14.3f %-14.3f %-14d\n",
+                   workloads[w], unit[0] ? unit : "n/a", st.mean, st.std_dev, st.count);
+        }
     }
+    printf("\n");
+}
+
+static void print_slowdown_view(benchmark_record_t *records, int count) {
+    const char *workloads[] = {"cpu", "memory", "io", "mixed"};
+    int nw = (int)(sizeof(workloads) / sizeof(workloads[0]));
+
+    printf("=== View 3: Slowdown vs Baseline (cores=1, intensity=25) ===\n");
+    printf("%-10s %-14s %-14s %-14s %-14s\n", "Workload", "Mean S", "Std S", "Min S", "Max S");
+    printf("%-10s %-14s %-14s %-14s %-14s\n", "--------", "------", "-----", "-----", "-----");
+
+    for (int w = 0; w < nw; w++) {
+        double vals[MAX_RECORDS];
+        int n = 0;
+
+        for (int i = 0; i < count; i++) {
+            if (strcmp(records[i].workload_type, workloads[w]) != 0) continue;
+            if (records[i].slowdown_vs_baseline <= 0.0) continue;
+            vals[n++] = records[i].slowdown_vs_baseline;
+        }
+
+        if (n > 0) {
+            stats_t st = compute_stats(vals, n);
+            printf("%-10s %-14.6f %-14.6f %-14.6f %-14.6f\n",
+                   workloads[w], st.mean, st.std_dev, st.min, st.max);
+        }
+    }
+    printf("\n");
+}
+
+int main(int argc, char *argv[]) {
+    const char *filename = "results/workload_benchmark_v2.csv";
+
+    int opt;
+    while ((opt = getopt(argc, argv, "f:h")) != -1) {
+        switch (opt) {
+            case 'f':
+                filename = optarg;
+                break;
+            case 'h':
+            default:
+                printf("SSP Analysis Tool - Unit-aware summary\n\n");
+                printf("Usage: %s [options]\n", argv[0]);
+                printf("  -f <file>    CSV file (default: results/workload_benchmark_v2.csv)\n");
+                printf("  -h           Show help\n");
+                return 0;
+        }
+    }
+
+    benchmark_record_t records[MAX_RECORDS];
+    int count = load_csv(filename, records, MAX_RECORDS);
+    if (count <= 0) {
+        fprintf(stderr, "Error: No data loaded from %s\n", filename);
+        return 1;
+    }
+
+    printf("=== SSP Benchmark Analysis ===\n");
+    printf("Loaded %d records from %s\n\n", count, filename);
+
+    print_unit_latency_view(records, count);
+    print_throughput_view(records, count);
+    print_slowdown_view(records, count);
+
+    return 0;
 }

@@ -42,10 +42,10 @@ echo "[1/5] Building executables..."
 make -C src clean > /dev/null 2>&1 || true
 make -C src all
 
-# ── 2. Clear previous results (keep header) ─────────────────────────────────
+# ── 2. Clear previous results (v2 schema) ───────────────────────────────────
 echo ""
 echo "[2/5] Clearing previous benchmark results..."
-rm -f results/workload_benchmark.csv
+rm -f results/workload_benchmark_v2.csv
 
 # ── 3. Run benchmarks ────────────────────────────────────────────────────────
 echo ""
@@ -71,7 +71,7 @@ done
 
 # ── 4. Analysis ──────────────────────────────────────────────────────────────
 echo "[4/5] Running statistical analysis..."
-./src/analysis -a
+./src/analysis -f results/workload_benchmark_v2.csv
 echo ""
 
 # ── 5. Generate graphs ───────────────────────────────────────────────────────
@@ -83,6 +83,6 @@ echo "=========================================="
 echo "Exhaustive benchmark complete!"
 echo "Total measurement cells : $total_cells"
 echo "Total runs              : $((total_cells * ITERATIONS))"
-echo "Results CSV             : results/workload_benchmark.csv"
+echo "Results CSV             : results/workload_benchmark_v2.csv"
 echo "Graphs                  : results/*.png"
 echo "=========================================="

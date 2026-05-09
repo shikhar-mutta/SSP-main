@@ -11,9 +11,6 @@
 #include <errno.h>
 #include <sys/syscall.h>
 #include <linux/perf_event.h>
-
-#include <sys/ioctl.h>
-/* ─────────────────────────────────────────────────────────────────────────── */
 #include <sys/ioctl.h>
 /* ─────────────────────────────────────────────────────────────────────────── */
 
@@ -93,6 +90,7 @@ int perf_add_event(perf_session_t *sess, uint32_t type, uint64_t config,
         .config = config,
         .size = sizeof(struct perf_event_attr),
         .disabled = 1,  /* Start disabled, enable explicitly */
+        .inherit = 1,   /* Include threads created by this process */
         .exclude_kernel = 0,  /* Include kernel events */
         .exclude_hv = 1,      /* Exclude hypervisor */
         .read_format = PERF_FORMAT_TOTAL_TIME_ENABLED |

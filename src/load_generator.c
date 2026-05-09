@@ -23,7 +23,8 @@ void mixed_load_worker(int intensity, int duration, int num_cpus, ssp_metrics_t 
  */
 static void print_usage(const char *prog_name) {
     printf("SSP Load Generator - Generate configurable system load\n\n");
-    printf("Usage: %s --type <TYPE> --intensity <INTENSITY> --duration <DURATION> [options]\n\n", prog_name);
+    printf("Usage: %s --type <TYPE> --intensity <INTENSITY> --duration <DURATION> [options]\n", prog_name);
+    printf("   or: %s --type <TYPE> --intensity <INTENSITY> --measure <SECONDS> [options]\n\n", prog_name);
     
     printf("Load Types:\n");
     printf("  cpu       – CPU-bound arithmetic loop with duty-cycle control\n");
@@ -34,16 +35,20 @@ static void print_usage(const char *prog_name) {
     printf("Required Arguments:\n");
     printf("  --type <TYPE>              Load type (cpu|io|memory|mixed)\n");
     printf("  --intensity <INTENSITY>    Load intensity 0-100 (percent)\n");
-    printf("  --duration <DURATION>      Run for this many seconds\n\n");
+    printf("  --duration <DURATION>      Steady-state measurement seconds\n\n");
     
     printf("Optional Arguments:\n");
-    printf("  --cpu <N>                  Pin CPU load to CPU N (default: -1, no pinning)\n");
+    printf("  --warmup <SECONDS>         Warmup phase duration (default: 0)\n");
+    printf("  --measure <SECONDS>        Steady-state measurement duration\n");
+    printf("  --cooldown <SECONDS>       Cooldown phase duration (default: 0)\n");
+    printf("  --cpu <N>                  Pin process to CPU N (default: -1, no pinning)\n");
     printf("  --cache-level <N>          Memory stride target: 1=L1, 2=L2, 3=L3 (default: 1)\n");
     printf("  --verbose                  Enable verbose logging\n");
     printf("  --help                     Show this help message\n\n");
     
     printf("Examples:\n");
     printf("  %s --type cpu --intensity 75 --duration 60\n", prog_name);
+    printf("  %s --type cpu --intensity 75 --warmup 5 --measure 30 --cooldown 5 --cpu 0\n", prog_name);
     printf("  %s --type memory --intensity 50 --duration 60 --cache-level 2\n", prog_name);
     printf("  %s --type mixed --intensity 80 --duration 120 --verbose\n", prog_name);
 }
@@ -55,6 +60,9 @@ typedef struct {
     char load_type[32];
     int intensity;
     int duration;
+    int warmup;
+    int measure;
+    int cooldown;
     int cpu_id;
     int cache_level;
     int verbose;
@@ -67,6 +75,9 @@ static args_t parse_args(int argc, char *argv[]) {
         .load_type = {0},
         .intensity = -1,
         .duration = -1,
+        .warmup = 0,
+        .measure = -1,
+        .cooldown = 0,
         .cpu_id = -1,
         .cache_level = 1,
         .verbose = 0,
@@ -78,6 +89,9 @@ static args_t parse_args(int argc, char *argv[]) {
         {"type",        required_argument, 0, 't'},
         {"intensity",   required_argument, 0, 'i'},
         {"duration",    required_argument, 0, 'd'},
+        {"warmup",      required_argument, 0, 'w'},
+        {"measure",     required_argument, 0, 'M'},
+        {"cooldown",    required_argument, 0, 'C'},
         {"cpu",         required_argument, 0, 'c'},
         {"cache-level", required_argument, 0, 'l'},
         {"metrics-file", required_argument, 0, 'm'},
@@ -89,7 +103,7 @@ static args_t parse_args(int argc, char *argv[]) {
     int opt_index = 0;
     int opt;
     
-    while ((opt = getopt_long(argc, argv, "t:i:d:c:l:m:vh", 
+    while ((opt = getopt_long(argc, argv, "t:i:d:w:M:C:c:l:m:vh", 
                               long_options, &opt_index)) != -1) {
         switch (opt) {
             case 't':
@@ -100,6 +114,15 @@ static args_t parse_args(int argc, char *argv[]) {
                 break;
             case 'd':
                 args.duration = atoi(optarg);
+                break;
+            case 'w':
+                args.warmup = atoi(optarg);
+                break;
+            case 'M':
+                args.measure = atoi(optarg);
+                break;
+            case 'C':
+                args.cooldown = atoi(optarg);
                 break;
             case 'c':
                 args.cpu_id = atoi(optarg);
@@ -152,8 +175,18 @@ static int validate_args(const args_t *args) {
         return 0;
     }
     
-    if (args->duration <= 0) {
-        fprintf(stderr, "Error: duration must be positive (got %d)\n", args->duration);
+    if (args->duration <= 0 && args->measure <= 0) {
+        fprintf(stderr, "Error: --duration or --measure must be positive\n");
+        return 0;
+    }
+
+    if (args->warmup < 0 || args->cooldown < 0) {
+        fprintf(stderr, "Error: warmup/cooldown must be >= 0\n");
+        return 0;
+    }
+
+    if (args->measure == 0) {
+        fprintf(stderr, "Error: measure must be > 0 if specified\n");
         return 0;
     }
     
@@ -180,6 +213,23 @@ static int write_metrics_file(const char *path, const ssp_metrics_t *m) {
             m->io_cycle_sum_latency_sq_ns);
     fclose(fp);
     return 0;
+}
+
+static void run_one_phase(const args_t *args, int phase_seconds, ssp_metrics_t *metrics) {
+    if (phase_seconds <= 0) {
+        return;
+    }
+
+    if (strcmp(args->load_type, "cpu") == 0) {
+        cpu_load_worker(args->intensity, phase_seconds, args->cpu_id, metrics);
+    } else if (strcmp(args->load_type, "io") == 0) {
+        io_load_worker(args->intensity, phase_seconds, metrics);
+    } else if (strcmp(args->load_type, "memory") == 0) {
+        memory_load_worker(args->intensity, phase_seconds, args->cache_level, metrics);
+    } else if (strcmp(args->load_type, "mixed") == 0) {
+        int num_cpus = ssp_get_cpu_count();
+        mixed_load_worker(args->intensity, phase_seconds, num_cpus, metrics);
+    }
 }
 
 /**
@@ -210,23 +260,23 @@ int main(int argc, char *argv[]) {
     ssp_init_signal_handlers();
     
     ssp_log(SSP_LOG_INFO, "SSP Load Generator started");
-    ssp_log(SSP_LOG_INFO, "Type=%s Intensity=%d%% Duration=%ds", 
-            args.load_type, args.intensity, args.duration);
+    int measure_sec = (args.measure > 0) ? args.measure : args.duration;
+    ssp_log(SSP_LOG_INFO,
+            "Type=%s Intensity=%d%% warmup=%ds measure=%ds cooldown=%ds",
+            args.load_type, args.intensity, args.warmup, measure_sec, args.cooldown);
+
+    /* Deterministic placement when benchmark passes --cpu. */
+    if (args.cpu_id >= 0) {
+        ssp_set_affinity(args.cpu_id);
+    }
 
     ssp_metrics_t metrics;
     ssp_metrics_init(&metrics);
-    
-    /* Dispatch to appropriate load generator */
-    if (strcmp(args.load_type, "cpu") == 0) {
-        cpu_load_worker(args.intensity, args.duration, args.cpu_id, &metrics);
-    } else if (strcmp(args.load_type, "io") == 0) {
-        io_load_worker(args.intensity, args.duration, &metrics);
-    } else if (strcmp(args.load_type, "memory") == 0) {
-        memory_load_worker(args.intensity, args.duration, args.cache_level, &metrics);
-    } else if (strcmp(args.load_type, "mixed") == 0) {
-        int num_cpus = ssp_get_cpu_count();
-        mixed_load_worker(args.intensity, args.duration, num_cpus, &metrics);
-    }
+
+    /* Warmup and cooldown intentionally run without recording metrics. */
+    run_one_phase(&args, args.warmup, NULL);
+    run_one_phase(&args, measure_sec, &metrics);
+    run_one_phase(&args, args.cooldown, NULL);
 
     if (args.metrics_file[0]) {
         if (write_metrics_file(args.metrics_file, &metrics) != 0) {

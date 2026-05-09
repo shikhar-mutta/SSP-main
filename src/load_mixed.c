@@ -32,6 +32,10 @@ typedef struct {
  */
 static void *mixed_thread_worker(void *arg) {
     mixed_thread_context_t *ctx = (mixed_thread_context_t *)arg;
+
+    if (ctx->cpu_id >= 0) {
+        ssp_set_affinity(ctx->cpu_id);
+    }
     
     if (ctx->thread_type == 0) {
         /* CPU load thread */
@@ -74,7 +78,7 @@ void mixed_load_worker(int intensity, int duration, int num_cpus, ssp_metrics_t 
     }
     cpu_ctx->intensity = intensity;
     cpu_ctx->duration = duration;
-    cpu_ctx->cpu_id = 0;
+    cpu_ctx->cpu_id = (num_cpus > 0) ? 0 : -1;
     cpu_ctx->thread_type = 0;
     cpu_ctx->cache_level = 0;
     ssp_metrics_init(&cpu_ctx->metrics);
@@ -95,7 +99,7 @@ void mixed_load_worker(int intensity, int duration, int num_cpus, ssp_metrics_t 
     }
     mem_ctx->intensity = intensity;
     mem_ctx->duration = duration;
-    mem_ctx->cpu_id = (num_cpus > 1) ? 1 : 0;
+    mem_ctx->cpu_id = (num_cpus > 1) ? 1 : ((num_cpus > 0) ? 0 : -1);
     mem_ctx->thread_type = 1;
     mem_ctx->cache_level = 0;
     ssp_metrics_init(&mem_ctx->metrics);

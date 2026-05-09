@@ -9,7 +9,7 @@ Outputs (all saved to results/):
                               separate line per core count
   workload_comparison.png   – grouped bar chart: workload x intensity at each
                               core count
-  tail_latency_<wl>.png     – per-workload tail latency (P50/P95/P99) by intensity
+    tail_latency_<wl>.png     – per-workload tail latency (P50/P99) by intensity
   latency_heatmap.png       – 2x2 heatmap: intensity x cores for each workload
   summary_statistics.png    – table: mean / std / min / max per workload
 """
@@ -48,6 +48,27 @@ def load_data(csv_path):
         sys.exit(1)
     df = pd.read_csv(csv_path)
     df.columns = df.columns.str.strip()
+
+    # Backward/forward-compatible schema normalization
+    if 'unit_latency_us' not in df.columns:
+        df['unit_latency_us'] = df['latency_us'] if 'latency_us' in df.columns else np.nan
+        if 'workload_type' in df.columns and 'io_cycle_latency_us' in df.columns:
+            io_mask = df['workload_type'] == 'io'
+            df.loc[io_mask, 'unit_latency_us'] = df.loc[io_mask, 'io_cycle_latency_us']
+
+    if 'throughput_value' not in df.columns:
+        df['throughput_value'] = np.nan
+    if 'throughput_unit' not in df.columns:
+        df['throughput_unit'] = ''
+        if 'workload_type' in df.columns:
+            df.loc[df['workload_type'] == 'cpu', 'throughput_unit'] = 'ops/s'
+            df.loc[df['workload_type'] == 'mixed', 'throughput_unit'] = 'ops/s'
+            df.loc[df['workload_type'] == 'memory', 'throughput_unit'] = 'access/s'
+            df.loc[df['workload_type'] == 'io', 'throughput_unit'] = 'MB/s'
+
+    if 'slowdown_vs_baseline' not in df.columns:
+        df['slowdown_vs_baseline'] = np.nan
+
     print(f"Loaded {len(df)} records from {csv_path}")
     return df
 
@@ -160,10 +181,10 @@ def plot_workload_comparison(df, out_dir):
 def plot_tail_latency(df, out_dir):
     workloads = [w for w in WORKLOAD_ORDER if w in df['workload_type'].unique()]
     intensities = sorted(df['intensity_pct'].unique())
-    pct_labels = ['P50', 'P95', 'P99']
-    pct_values = [50, 95, 99]
-    pct_colors = ['#2E86AB', '#F18F01', '#C73E1D']
-    width = 0.22
+    pct_labels = ['P50', 'P99']
+    pct_values = [50, 99]
+    pct_colors = ['#2E86AB', '#C73E1D']
+    width = 0.30
     for wl in workloads:
         sub = df[df['workload_type'] == wl]
         # Use per-cycle latency for I/O, normalized latency for others
@@ -173,7 +194,7 @@ def plot_tail_latency(df, out_dir):
         for j, (plabel, pval, pcol) in enumerate(zip(pct_labels, pct_values, pct_colors)):
             vals = [np.percentile(sub[sub['intensity_pct'] == i][metric], pval)
                     for i in intensities]
-            offset = (j - 1) * width
+            offset = (j - 0.5) * width
             ax.bar(x + offset, vals, width, label=plabel,
                    color=pcol, edgecolor='grey', linewidth=0.7, alpha=0.9)
         ax.set_xlabel('Intensity (%)')
@@ -248,11 +269,10 @@ def plot_summary_statistics(df, out_dir):
             f'{sub.min():.1f}',
             f'{sub.max():.1f}',
             f'{np.percentile(sub, 50):.1f}',
-            f'{np.percentile(sub, 95):.1f}',
             f'{np.percentile(sub, 99):.1f}',
         ])
     col_labels = ['Workload', 'Mean (us)', 'Std Dev', 'Min (us)', 'Max (us)',
-                  'P50 (us)', 'P95 (us)', 'P99 (us)']
+                  'P50 (us)', 'P99 (us)']
     fig, ax = plt.subplots(figsize=(14, 1.2 + 0.55 * len(rows)))
     ax.axis('off')
     tbl = ax.table(cellText=rows, colLabels=col_labels,
@@ -273,6 +293,111 @@ def plot_summary_statistics(df, out_dir):
                  fontsize=14, fontweight='bold', pad=15)
     fig.tight_layout()
     save(fig, os.path.join(out_dir, 'summary_statistics.png'))
+
+
+def plot_unit_latency_by_workload(df, out_dir):
+    workloads = [w for w in WORKLOAD_ORDER if w in df['workload_type'].unique()]
+    means = []
+    errs = []
+    labels = []
+    for wl in workloads:
+        sub = df[df['workload_type'] == wl]['unit_latency_us'].dropna()
+        if len(sub) == 0:
+            continue
+        means.append(sub.mean())
+        errs.append(sub.std())
+        labels.append(WORKLOAD_LABELS.get(wl, wl))
+
+    if len(means) == 0:
+        return
+
+    x = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(x, means, yerr=errs, capsize=4,
+           color=COLORS[:len(labels)], edgecolor='grey', linewidth=0.8)
+    ax.set_yscale('log')
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel('Unit Latency (us) [log scale]')
+    ax.set_title('Unit Latency by Workload')
+    ax.get_yaxis().set_major_formatter(mticker.ScalarFormatter())
+    ax.grid(True, axis='y', which='both', alpha=0.25)
+    fig.tight_layout()
+    save(fig, os.path.join(out_dir, 'unit_latency_by_workload.png'))
+
+
+def plot_throughput_by_workload(df, out_dir):
+    workloads = [w for w in WORKLOAD_ORDER if w in df['workload_type'].unique()]
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
+
+    grouped_units = [
+        ('ops/s', ['cpu', 'mixed']),
+        ('access/s', ['memory']),
+        ('MB/s', ['io']),
+    ]
+
+    for ax, (unit, wl_group) in zip(axes, grouped_units):
+        labels = []
+        means = []
+        errs = []
+        for wl in wl_group:
+            if wl not in workloads:
+                continue
+            sub = df[(df['workload_type'] == wl) & (df['throughput_unit'] == unit)]['throughput_value'].dropna()
+            if len(sub) == 0:
+                continue
+            labels.append(WORKLOAD_LABELS.get(wl, wl))
+            means.append(sub.mean())
+            errs.append(sub.std())
+
+        if len(labels) == 0:
+            ax.set_visible(False)
+            continue
+
+        x = np.arange(len(labels))
+        ax.bar(x, means, yerr=errs, capsize=4,
+               color=COLORS[:len(labels)], edgecolor='grey', linewidth=0.8)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels)
+        ax.set_title(f'Throughput ({unit})')
+        ax.grid(True, axis='y', alpha=0.25)
+
+    fig.suptitle('Throughput by Workload Type', fontsize=14, fontweight='bold')
+    fig.tight_layout()
+    save(fig, os.path.join(out_dir, 'throughput_by_workload.png'))
+
+
+def plot_slowdown_by_workload(df, out_dir):
+    if 'slowdown_vs_baseline' not in df.columns:
+        return
+
+    workloads = [w for w in WORKLOAD_ORDER if w in df['workload_type'].unique()]
+    means = []
+    errs = []
+    labels = []
+    for wl in workloads:
+        sub = df[(df['workload_type'] == wl) & (df['slowdown_vs_baseline'] > 0)]['slowdown_vs_baseline']
+        if len(sub) == 0:
+            continue
+        labels.append(WORKLOAD_LABELS.get(wl, wl))
+        means.append(sub.mean())
+        errs.append(sub.std())
+
+    if len(labels) == 0:
+        return
+
+    x = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(x, means, yerr=errs, capsize=4,
+           color=COLORS[:len(labels)], edgecolor='grey', linewidth=0.8)
+    ax.axhline(1.0, color='black', linestyle='--', linewidth=1.2, alpha=0.8)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel('Slowdown S = L_loaded / L_baseline')
+    ax.set_title('Slowdown vs Baseline (cores=1, intensity=25)')
+    ax.grid(True, axis='y', alpha=0.25)
+    fig.tight_layout()
+    save(fig, os.path.join(out_dir, 'slowdown_by_workload.png'))
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -321,7 +446,7 @@ def plot_scheduling_analysis(df, out_dir):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    csv_path = 'results/workload_benchmark.csv'
+    csv_path = 'results/workload_benchmark_v2.csv'
     out_dir  = 'results'
     print('=' * 60)
     print('SSP Benchmark Results Visualization')
@@ -336,6 +461,9 @@ def main():
     plot_latency_heatmap(df, out_dir)
     plot_summary_statistics(df, out_dir)
     plot_scheduling_analysis(df, out_dir)
+    plot_unit_latency_by_workload(df, out_dir)
+    plot_throughput_by_workload(df, out_dir)
+    plot_slowdown_by_workload(df, out_dir)
     print('-' * 40)
     print(f'\nAll graphs saved to: {out_dir}/')
     print('=' * 60)
